@@ -2,20 +2,23 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Image from "next/image";
-import type { Investment, PaymentProvider, PendingWithdrawal, TeamMember, Transaction } from "@/lib/types";
+import type { CommunityLinks, Investment, PendingWithdrawal, TeamMember, Transaction } from "@/lib/types";
 import {
-  approvePesaJetWithdrawal,
+  approveWithdrawal,
   claimDailyIncome,
   daysElapsed,
+  fetchCommunityLinks,
+  fetchAdminTransactions,
   fetchInvestments,
   fetchPendingWithdrawals,
   fetchTeam,
   fetchTransactions,
   formatDate,
   formatMoney,
-  rejectPesaJetWithdrawal,
+  rejectWithdrawal,
   requestDeposit,
   requestWithdrawal,
+  saveCommunityLinks,
   submitTestCompletion,
 } from "@/lib/app-data";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
@@ -48,6 +51,10 @@ export function MemberPages({ path }: { path: string }) {
       return <WithdrawPage />;
     case "/admin/withdrawals":
       return <AdminWithdrawalsPage />;
+    case "/admin/settings":
+      return <AdminSettingsPage />;
+    case "/admin/transactions":
+      return <AdminTransactionsPage />;
     case "/records":
       return <RecordsPage />;
     case "/announce":
@@ -366,11 +373,23 @@ function AccountPage() {
       </Panel>
       <ReferralCodePanel />
       {user?.app_metadata?.role === "admin" && (
-        <button type="button" onClick={() => navigate("/admin/withdrawals")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
-          <IconClock width={20} height={20} className="shrink-0 text-primary" />
-          <span className="flex-1">Payout review</span>
-          <IconChevronRight className="text-muted" />
-        </button>
+        <>
+          <button type="button" onClick={() => navigate("/admin/withdrawals")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
+            <IconClock width={20} height={20} className="shrink-0 text-primary" />
+            <span className="flex-1">Payout review</span>
+            <IconChevronRight className="text-muted" />
+          </button>
+          <button type="button" onClick={() => navigate("/admin/settings")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
+            <IconInfo width={20} height={20} className="shrink-0 text-primary" />
+            <span className="flex-1">Community settings</span>
+            <IconChevronRight className="text-muted" />
+          </button>
+          <button type="button" onClick={() => navigate("/admin/transactions")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
+            <IconRecords width={20} height={20} className="shrink-0 text-primary" />
+            <span className="flex-1">All transactions</span>
+            <IconChevronRight className="text-muted" />
+          </button>
+        </>
       )}
       <button type="button" onClick={() => navigate("/about")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
         <IconInfo width={20} height={20} className="shrink-0 text-primary" />
@@ -391,31 +410,103 @@ function AccountPage() {
   );
 }
 
-function ProviderPicker({ value, onChange }: { value: PaymentProvider; onChange: (provider: PaymentProvider) => void }) {
+function validateTelegramUrl(value: string, label: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  try {
+    const url = new URL(trimmed);
+    if (
+      url.protocol !== "https:"
+      || !["t.me", "telegram.me"].includes(url.hostname.toLowerCase())
+      || url.pathname === "/"
+    ) {
+      throw new Error();
+    }
+    return url.toString();
+  } catch {
+    throw new Error(`${label} must be an HTTPS Telegram link, such as https://t.me/your_group.`);
+  }
+}
+
+function AdminSettingsPage() {
+  const { user, toast } = useApp();
+  const isAdmin = user?.app_metadata?.role === "admin";
+  const [links, setLinks] = useState<CommunityLinks>({ serviceChatUrl: "", telegramGroupUrl: "" });
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    fetchCommunityLinks(getSupabaseBrowserClient())
+      .then((value) => { if (active) setLinks(value); })
+      .catch(() => { if (active) setError("Community settings could not be loaded. Apply the community settings database migration and try again."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [isAdmin]);
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const nextLinks = {
+        serviceChatUrl: validateTelegramUrl(links.serviceChatUrl, "Service chat URL"),
+        telegramGroupUrl: validateTelegramUrl(links.telegramGroupUrl, "Telegram group URL"),
+      };
+      await saveCommunityLinks(getSupabaseBrowserClient(), nextLinks);
+      setLinks(nextLinks);
+      toast("Community links saved.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Community links could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!isAdmin) {
+    return <PageFrame title="Community settings"><PageError message="Administrator access is required." /></PageFrame>;
+  }
+
   return (
-    <fieldset className="m-0 border-0 p-0">
-      <legend className="text-[12px] font-semibold text-ink-soft">Registered number network</legend>
-      <div className="mt-1.5 grid grid-cols-2 gap-2">
-        {(["mtn", "airtel"] as const).map((provider) => (
-          <button
-            key={provider}
-            type="button"
-            aria-pressed={value === provider}
-            onClick={() => onChange(provider)}
-            className={`h-10 rounded-lg border text-[13px] font-semibold ${value === provider ? "border-primary bg-primary text-white" : "border-line-blue bg-white text-ink"}`}
-          >
-            {provider === "mtn" ? "MTN Mobile Money" : "Airtel Money"}
-          </button>
-        ))}
-      </div>
-    </fieldset>
+    <PageFrame title="Community settings">
+      <Panel title="Telegram links">
+        {loading ? (
+          <EmptyMessage>Loading community settings...</EmptyMessage>
+        ) : (
+          <form onSubmit={(event) => void save(event)} className="space-y-4">
+            <Field
+              label="Service chat URL"
+              type="url"
+              inputMode="url"
+              placeholder="https://t.me/your_support_account"
+              value={links.serviceChatUrl}
+              onChange={(event) => setLinks((current) => ({ ...current, serviceChatUrl: event.target.value }))}
+            />
+            <Field
+              label="Telegram group URL"
+              type="url"
+              inputMode="url"
+              placeholder="https://t.me/your_group"
+              value={links.telegramGroupUrl}
+              onChange={(event) => setLinks((current) => ({ ...current, telegramGroupUrl: event.target.value }))}
+            />
+            <p className="m-0 text-[12px] leading-relaxed text-muted">These links appear as the Service and Group actions on the home page. Use HTTPS links from t.me or telegram.me; blank links remain unavailable until configured.</p>
+            {error && <PageError message={error} />}
+            <PageButton type="submit" disabled={busy || loading}>{busy ? "Saving..." : "Save links"}</PageButton>
+          </form>
+        )}
+      </Panel>
+    </PageFrame>
   );
 }
 
 function DepositPage() {
-  const { profile, toast } = useApp();
+  const { profile, toast, navigate } = useApp();
   const [amount, setAmount] = useState("");
-  const [provider, setProvider] = useState<PaymentProvider>("mtn");
+  const [phone, setPhone] = useState(profile?.phone ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -426,12 +517,17 @@ function DepositPage() {
       setError("The minimum deposit is UGX 10,000.");
       return;
     }
+    if (!phone.trim()) {
+      setError("Enter the phone number that should receive the payment prompt.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await requestDeposit(value, provider);
+      await requestDeposit(value, phone);
       setAmount("");
-      toast(`Payment prompt sent to ${profile?.phone}. Approve it on that phone to complete your deposit.`);
+      toast(`Payment prompt sent to ${phone}. Approve it on that phone to complete your deposit.`);
+      navigate("/records");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Deposit request could not be submitted.");
     } finally {
@@ -444,15 +540,14 @@ function DepositPage() {
       <Panel title="Add funds">
         <form onSubmit={submit} className="space-y-4">
           <Field label="Amount (UGX)" type="number" min="10000" step="1000" inputMode="numeric" required value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="10,000" />
-          <Field label="Registered transaction phone" type="tel" value={profile?.phone ?? ""} readOnly />
-          <ProviderPicker value={provider} onChange={setProvider} />
-          <p className="m-0 text-[12px] text-muted">Minimum deposit: <strong className="text-ink">UGX 10,000</strong>. A PesaJet prompt is sent to your registered phone; your balance updates after the payment is confirmed.</p>
+          <Field label="Phone number" type="tel" inputMode="tel" autoComplete="tel" required value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+256 7XX XXX XXX" />
+          <p className="m-0 text-[12px] text-muted">Minimum deposit: <strong className="text-ink">UGX 10,000</strong>. Approve the prompt on this phone. Your balance updates when payment is confirmed.</p>
           {error && <PageError message={error} />}
-          <PageButton type="submit" disabled={busy || !profile?.phone}>{busy ? "Sending prompt..." : "Send payment prompt"}</PageButton>
+          <PageButton type="submit" disabled={busy}>{busy ? "Sending prompt..." : "Send payment prompt"}</PageButton>
         </form>
       </Panel>
       <Panel title="What happens next">
-        <p className="m-0 text-[13px] leading-relaxed text-ink-soft">Approve the mobile-money prompt on the registered number. PesaJet will notify Testing Lives when the payment completes; only then is your balance credited.</p>
+        <p className="m-0 text-[13px] leading-relaxed text-ink-soft">A payment prompt will be sent to the number you entered. Approve it on your phone; the deposit will appear in your balance after confirmation.</p>
       </Panel>
     </PageFrame>
   );
@@ -461,7 +556,7 @@ function DepositPage() {
 function WithdrawPage() {
   const { profile, refreshProfile, toast } = useApp();
   const [amount, setAmount] = useState("");
-  const [provider, setProvider] = useState<PaymentProvider>("mtn");
+  const [phone, setPhone] = useState(profile?.phone ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -469,13 +564,14 @@ function WithdrawPage() {
     event.preventDefault();
     const value = Number(amount);
     if (!Number.isFinite(value) || value < 5000) { setError("The minimum withdrawal is UGX 5,000."); return; }
+    if (!phone.trim()) { setError("Enter the phone number where you want to receive your withdrawal."); return; }
     setBusy(true);
     setError(null);
     try {
-      await requestWithdrawal(value, provider);
+      await requestWithdrawal(value, phone);
       await refreshProfile();
       setAmount("");
-      toast("Request submitted. Funds are reserved while an admin reviews it.");
+      toast("Withdrawal request submitted. It is pending admin approval.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Withdrawal request could not be submitted.");
     } finally {
@@ -495,17 +591,16 @@ function WithdrawPage() {
       </Panel>
       <Panel title="Withdrawal amount">
         <form onSubmit={submit} className="space-y-4">
-          <Field label="Registered transaction phone" type="tel" value={profile?.phone ?? ""} readOnly />
-          <ProviderPicker value={provider} onChange={setProvider} />
+          <Field label="Phone number to receive payment" type="tel" inputMode="tel" autoComplete="tel" required value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+256 7XX XXX XXX" />
           <Field label="Amount (UGX)" type="number" min="5000" step="1000" inputMode="numeric" required value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="5,000" />
           <div className="space-y-2 rounded-lg bg-page p-3 text-[12px]">
             <p className="m-0 flex justify-between text-muted"><span>Withdrawal fee (20%)</span><span>UGX {formatMoney(fee)}</span></p>
             <p className="m-0 flex justify-between font-semibold text-ink"><span>You receive</span><span>UGX {formatMoney(payout)}</span></p>
           </div>
           <p className="m-0 flex items-center gap-2 text-[11px] text-muted"><IconClock width={16} height={16} /> Requests are accepted 9:00 AM–9:00 PM Kampala time. Minimum UGX 5,000.</p>
-          <p className="m-0 text-[12px] leading-relaxed text-muted">Your wallet amount is reserved when requested. PesaJet is contacted only after admin approval; a failed payout is refunded.</p>
+          <p className="m-0 text-[12px] leading-relaxed text-muted">Your wallet amount is reserved while an admin reviews your request. After approval, payment is sent to the number above. If payment fails, the reserved amount is refunded.</p>
           {error && <PageError message={error} />}
-          <PageButton type="submit" disabled={busy || !profile?.phone}>{busy ? "Submitting..." : "Request withdrawal"}</PageButton>
+          <PageButton type="submit" disabled={busy}>{busy ? "Submitting..." : "Request withdrawal"}</PageButton>
         </form>
       </Panel>
     </PageFrame>
@@ -535,10 +630,12 @@ function AdminWithdrawalsPage() {
     setError(null);
     try {
       const result = approve
-        ? await approvePesaJetWithdrawal(request.id)
-        : await rejectPesaJetWithdrawal(request.id);
+        ? await approveWithdrawal(request.id)
+        : await rejectWithdrawal(request.id);
       toast(approve
-        ? `PesaJet payout status: ${result.status ?? "processing"}.`
+        ? result.status === "COMPLETED"
+          ? "Withdrawal approved and payment completed."
+          : "Withdrawal approved. Payment is processing."
         : "Withdrawal declined and reserved funds refunded.");
       setRequests(await fetchPendingWithdrawals(getSupabaseBrowserClient()));
     } catch (err) {
@@ -551,11 +648,11 @@ function AdminWithdrawalsPage() {
   }
 
   if (!isAdmin) {
-    return <PageFrame title="Payout review"><PageError message="Administrator access is required." /></PageFrame>;
+    return <PageFrame title="Withdrawal review"><PageError message="Administrator access is required." /></PageFrame>;
   }
 
   return (
-    <PageFrame title="PesaJet payout review">
+    <PageFrame title="Withdrawal review">
       <Panel title="Pending withdrawals" action={<button type="button" onClick={() => { setLoading(true); void fetchPendingWithdrawals(getSupabaseBrowserClient()).then(setRequests).catch(() => setError("The payout queue could not be loaded.")).finally(() => setLoading(false)); }} aria-label="Refresh payout queue" className="text-primary"><IconRefresh /></button>}>
         {error && <PageError message={error} />}
         {loading ? <EmptyMessage>Loading payout requests...</EmptyMessage> : requests.length === 0 ? <EmptyMessage>No withdrawals need review.</EmptyMessage> : (
@@ -565,7 +662,7 @@ function AdminWithdrawalsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="m-0 text-[13px] font-bold text-ink">{request.payment_phone}</p>
-                    <p className="m-0 mt-1 text-[11px] text-muted">{request.payment_provider?.toUpperCase()} · {formatDate(request.created_at)}</p>
+                    <p className="m-0 mt-1 text-[11px] text-muted">{request.member_phone} · {formatDate(request.created_at)}</p>
                   </div>
                   <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${request.status === "processing" ? "bg-wait/15 text-wait" : "bg-page text-muted"}`}>
                     {request.status === "processing" ? "Payout processing" : "Awaiting approval"}
@@ -574,18 +671,18 @@ function AdminWithdrawalsPage() {
                 <dl className="mb-0 mt-3 space-y-1.5 text-[12px]">
                   <div className="flex justify-between"><dt className="text-muted">Requested</dt><dd className="m-0 font-semibold text-ink">UGX {formatMoney(request.amount)}</dd></div>
                   <div className="flex justify-between"><dt className="text-muted">Fee</dt><dd className="m-0 text-ink">UGX {formatMoney(request.fee ?? 0)}</dd></div>
-                  <div className="flex justify-between"><dt className="text-muted">PesaJet payout</dt><dd className="m-0 font-bold text-primary">UGX {formatMoney(request.net_amount ?? 0)}</dd></div>
+                  <div className="flex justify-between"><dt className="text-muted">Payment amount</dt><dd className="m-0 font-bold text-primary">UGX {formatMoney(request.net_amount ?? 0)}</dd></div>
                 </dl>
-                {request.provider_transaction_id && <p className="mb-0 mt-2 break-all text-[10px] text-muted">PesaJet ID: {request.provider_transaction_id}</p>}
+                {request.failure_reason && <p className="mb-0 mt-2 text-[11px] text-danger">Payment failure: {request.failure_reason}</p>}
                 <div className="mt-3 flex gap-2 border-t border-line-blue/50 pt-3">
                   <PageButton disabled={activeId === request.id} onClick={() => void review(request, true)}>
-                    {activeId === request.id ? "Working..." : request.status === "processing" ? "Retry same payout" : "Approve & pay"}
+                    {activeId === request.id ? "Working..." : request.status === "processing" ? "Retry payment" : "Approve & pay"}
                   </PageButton>
                   {request.status === "pending" && (
                     <button type="button" disabled={activeId === request.id} onClick={() => void review(request, false)} className="min-h-10 rounded-lg border border-danger/30 px-3 py-2 text-[12px] font-semibold text-danger disabled:opacity-50">Decline</button>
                   )}
                 </div>
-                {request.status === "processing" && <p className="mb-0 mt-2 text-[10px] leading-relaxed text-muted">Retry uses the original idempotency reference. Confirm the PesaJet status before taking any manual action.</p>}
+                {request.status === "processing" && <p className="mb-0 mt-2 text-[10px] leading-relaxed text-muted">Retry continues the original payment request.</p>}
               </article>
             ))}
           </div>
@@ -596,20 +693,42 @@ function AdminWithdrawalsPage() {
 }
 
 function RecordsPage() {
-  const { user } = useApp();
+  const { user, profile } = useApp();
   const [items, setItems] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     let active = true;
-    fetchTransactions(getSupabaseBrowserClient(), user.id)
-      .then((transactions) => { if (active) setItems(transactions); })
+    fetchTransactions(getSupabaseBrowserClient(), user.id, 0, 100)
+      .then((transactions) => {
+        if (active) {
+          setItems(transactions);
+          setHasMore(transactions.length === 100);
+        }
+      })
       .catch(() => { if (active) setError("Transactions could not be loaded."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [user]);
+
+  async function loadMore() {
+    if (!user) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const transactions = await fetchTransactions(getSupabaseBrowserClient(), user.id, items.length, 100);
+      setItems((current) => [...current, ...transactions]);
+      setHasMore(transactions.length === 100);
+    } catch {
+      setError("More transactions could not be loaded.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   return (
     <PageFrame title="Records">
@@ -621,8 +740,9 @@ function RecordsPage() {
               <article key={item.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                 <div className="min-w-0">
                   <p className="m-0 truncate text-[13px] font-semibold capitalize text-ink">{item.note ?? item.kind}</p>
-                  <p className="m-0 mt-1 text-[10px] text-muted">{formatDate(item.created_at)} · {item.status}</p>
-                  {item.payment_provider && <p className="m-0 mt-1 text-[10px] text-muted">PesaJet · {item.payment_provider.toUpperCase()} · {item.payment_phone}</p>}
+                  <p className="m-0 mt-1 text-[10px] text-muted">{formatDate(item.created_at)} · {transactionStatusLabel(item.status)}</p>
+                  <p className="m-0 mt-1 text-[10px] text-muted">Phone: {item.payment_phone ?? profile?.phone ?? "—"} · {item.kind}</p>
+                  {item.failure_reason && <p className="m-0 mt-1 text-[10px] text-danger">Failure: {item.failure_reason}</p>}
                   {item.kind === "withdraw" && item.net_amount != null && (
                     <p className="m-0 mt-1 text-[10px] text-muted">Fee UGX {formatMoney(item.fee ?? 0)} · Net UGX {formatMoney(item.net_amount)}</p>
                   )}
@@ -634,8 +754,103 @@ function RecordsPage() {
             ))}
           </div>
         )}
+        {!loading && hasMore && (
+          <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="mt-4 h-10 w-full rounded-lg border border-primary/30 bg-white text-[12px] font-semibold text-primary disabled:opacity-60">
+            {loadingMore ? "Loading..." : "Load more transactions"}
+          </button>
+        )}
       </Panel>
-      <p className="m-0 text-[11px] text-muted">Withdrawal fees and net payouts are recorded with each request.</p>
+      <p className="m-0 text-[11px] text-muted">Each transaction records its type, phone number, amount, and current outcome.</p>
+    </PageFrame>
+  );
+}
+
+function transactionStatusLabel(status: Transaction["status"]) {
+  if (status === "approved") return "Successful";
+  if (status === "rejected") return "Failed";
+  if (status === "processing") return "Processing";
+  return "Pending";
+}
+
+function AdminTransactionsPage() {
+  const { user } = useApp();
+  const isAdmin = user?.app_metadata?.role === "admin";
+  const [items, setItems] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    fetchAdminTransactions(getSupabaseBrowserClient(), 0, 100)
+      .then((transactions) => {
+        if (active) {
+          setItems(transactions);
+          setHasMore(transactions.length === 100);
+        }
+      })
+      .catch(() => { if (active) setError("The transaction log could not be loaded."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [isAdmin]);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const transactions = await fetchAdminTransactions(getSupabaseBrowserClient(), items.length, 100);
+      setItems((current) => [...current, ...transactions]);
+      setHasMore(transactions.length === 100);
+    } catch {
+      setError("More transactions could not be loaded.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  if (!isAdmin) {
+    return <PageFrame title="All transactions"><PageError message="Administrator access is required." /></PageFrame>;
+  }
+
+  return (
+    <PageFrame title="All transactions">
+      <Panel title="Transaction log">
+        {error && <PageError message={error} />}
+        {loading ? <EmptyMessage>Loading transactions...</EmptyMessage> : items.length === 0 ? <EmptyMessage>No transactions have been recorded.</EmptyMessage> : (
+          <div className="divide-y divide-line-blue/50">
+            {items.map((item) => (
+              <article key={item.id} className="py-3 first:pt-0 last:pb-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="m-0 text-[13px] font-semibold capitalize text-ink">{item.kind}</p>
+                    <p className="m-0 mt-1 text-[11px] text-ink-soft">Member: {item.member_phone ?? "—"} · Payment: {item.payment_phone ?? item.member_phone ?? "—"}</p>
+                    <p className="m-0 mt-1 text-[10px] text-muted">{formatDate(item.created_at)}{item.payment_provider ? ` · ${item.payment_provider.toUpperCase()}` : ""}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="m-0 text-[12px] font-bold text-ink">UGX {formatMoney(item.amount)}</p>
+                    <span className={`mt-1 inline-block rounded-full px-2 py-1 text-[10px] font-semibold ${
+                      item.status === "approved" ? "bg-success/10 text-success"
+                        : item.status === "rejected" ? "bg-danger/10 text-danger"
+                          : item.status === "processing" ? "bg-wait/15 text-wait" : "bg-page text-muted"
+                    }`}>{transactionStatusLabel(item.status)}</span>
+                  </div>
+                </div>
+                {item.failure_reason && <p className="mb-0 mt-2 text-[11px] text-danger">Failure: {item.failure_reason}</p>}
+                {item.kind === "withdraw" && item.net_amount != null && (
+                  <p className="mb-0 mt-1 text-[10px] text-muted">Fee UGX {formatMoney(item.fee ?? 0)} · Paid UGX {formatMoney(item.net_amount)}</p>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+        {!loading && hasMore && (
+          <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="mt-4 h-10 w-full rounded-lg border border-primary/30 bg-white text-[12px] font-semibold text-primary disabled:opacity-60">
+            {loadingMore ? "Loading..." : "Load more transactions"}
+          </button>
+        )}
+      </Panel>
     </PageFrame>
   );
 }

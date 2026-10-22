@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   BankAccount,
+  CommunityLinks,
   Investment,
-  PaymentProvider,
   PendingWithdrawal,
   Product,
   Profile,
@@ -13,8 +13,34 @@ import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 export const PHONE_EMAIL_DOMAIN = "testinglives.com";
 
+const EMPTY_COMMUNITY_LINKS: CommunityLinks = {
+  serviceChatUrl: "",
+  telegramGroupUrl: "",
+};
+
 export function phoneToEmail(dial: string, phone: string) {
   return `${dial.replace("+", "")}${phone}@${PHONE_EMAIL_DOMAIN}`;
+}
+
+export async function fetchCommunityLinks(client: SupabaseClient): Promise<CommunityLinks> {
+  const { data, error } = await client
+    .from("community_settings")
+    .select("service_chat_url, telegram_group_url")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error) throw error;
+  return data
+    ? { serviceChatUrl: data.service_chat_url, telegramGroupUrl: data.telegram_group_url }
+    : EMPTY_COMMUNITY_LINKS;
+}
+
+export async function saveCommunityLinks(client: SupabaseClient, links: CommunityLinks) {
+  const { error } = await client.from("community_settings").upsert({
+    id: 1,
+    service_chat_url: links.serviceChatUrl,
+    telegram_group_url: links.telegramGroupUrl,
+  });
+  if (error) throw error;
 }
 
 export async function fetchProfile(client: SupabaseClient, userId: string) {
@@ -49,13 +75,13 @@ export async function fetchInvestments(client: SupabaseClient, userId: string) {
   return data ?? [];
 }
 
-export async function fetchTransactions(client: SupabaseClient, userId: string) {
+export async function fetchTransactions(client: SupabaseClient, userId: string, offset = 0, limit = 100) {
   const { data, error } = await client
     .from("transactions")
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(100)
+    .range(offset, offset + limit - 1)
     .returns<Transaction[]>();
   if (error) throw error;
   return data ?? [];
@@ -126,12 +152,12 @@ async function postAuthenticatedPayment<T>(path: string, payload: unknown): Prom
   return result;
 }
 
-export async function requestDeposit(amount: number, provider: PaymentProvider) {
-  return postAuthenticatedPayment<PaymentApiResult>("/api/payments/deposit", { amount, provider });
+export async function requestDeposit(amount: number, phone: string) {
+  return postAuthenticatedPayment<PaymentApiResult>("/api/payments/deposit", { amount, phone });
 }
 
-export async function requestWithdrawal(amount: number, provider: PaymentProvider) {
-  return postAuthenticatedPayment<PaymentApiResult>("/api/payments/withdrawal", { amount, provider });
+export async function requestWithdrawal(amount: number, phone: string) {
+  return postAuthenticatedPayment<PaymentApiResult>("/api/payments/withdrawal", { amount, phone });
 }
 
 export async function fetchPendingWithdrawals(client: SupabaseClient) {
@@ -140,11 +166,20 @@ export async function fetchPendingWithdrawals(client: SupabaseClient) {
   return Array.isArray(data) ? data : [];
 }
 
-export async function approvePesaJetWithdrawal(transactionId: string) {
+export async function fetchAdminTransactions(client: SupabaseClient, offset = 0, limit = 100) {
+  const { data, error } = await client.rpc("get_admin_transaction_log", {
+    p_limit: limit,
+    p_offset: offset,
+  }).returns<Transaction[]>();
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function approveWithdrawal(transactionId: string) {
   return postAuthenticatedPayment<PaymentApiResult>(`/api/admin/withdrawals/${transactionId}/approve`, {});
 }
 
-export async function rejectPesaJetWithdrawal(transactionId: string) {
+export async function rejectWithdrawal(transactionId: string) {
   return postAuthenticatedPayment<PaymentApiResult>(`/api/admin/withdrawals/${transactionId}/reject`, {});
 }
 

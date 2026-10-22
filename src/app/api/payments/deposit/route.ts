@@ -1,17 +1,15 @@
 import { authenticateRequest, createPesaJetClient, createServiceRoleClient, PaymentConfigError } from "@/lib/server/payments";
 
-const PROVIDERS = new Set(["mtn", "airtel"]);
-
 type DepositRequest = {
   amount?: unknown;
-  provider?: unknown;
+  phone?: unknown;
 };
 
 type DepositRecord = {
   transaction_id: string;
   reference: string;
   phone_number: string;
-  provider: "mtn" | "airtel";
+  provider: "mtn" | "airtel" | null;
   amount: number;
 };
 
@@ -27,20 +25,23 @@ export async function POST(request: Request) {
   }
 
   const amount = Number(body.amount);
-  const provider = typeof body.provider === "string" ? body.provider.toLowerCase() : "";
+  const phoneInput = typeof body.phone === "string" ? body.phone.trim() : "";
   if (!Number.isInteger(amount) || amount < 10000) {
     return Response.json({ error: "The minimum deposit is UGX 10,000." }, { status: 400 });
-  }
-  if (!PROVIDERS.has(provider)) {
-    return Response.json({ error: "Choose MTN or Airtel Mobile Money." }, { status: 400 });
   }
 
   try {
     const pesajet = createPesaJetClient();
+    const phone = pesajet.utils.formatPhoneNumber(phoneInput);
+    if (!/^\+256\d{9}$/.test(phone)) {
+      return Response.json({ error: "Enter a valid Uganda mobile number." }, { status: 400 });
+    }
+    const detectedProvider = pesajet.utils.detectProvider(phone);
     const serviceClient = createServiceRoleClient();
-    const { data, error } = await session.client.rpc("request_pesajet_deposit", {
+    const { data, error } = await session.client.rpc("request_mobile_deposit", {
       p_amount: amount,
-      p_provider: provider,
+      p_phone_number: phone,
+      p_provider: detectedProvider,
     });
     if (error) return Response.json({ error: error.message }, { status: 400 });
 
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
       amount: deposit.amount,
       currency: "UGX",
       phoneNumber: pesajet.utils.formatPhoneNumber(deposit.phone_number),
-      provider: deposit.provider,
+      ...(deposit.provider ? { provider: deposit.provider } : {}),
       reference: deposit.reference,
       description: "Testing Lives deposit",
       idempotencyKey: deposit.reference,
@@ -59,9 +60,9 @@ export async function POST(request: Request) {
     if (
       payment.type !== "COLLECTION" || payment.amount !== deposit.amount ||
       payment.currency !== "UGX" || payment.reference !== deposit.reference ||
-      payment.provider !== deposit.provider
+      (deposit.provider && payment.provider !== deposit.provider)
     ) {
-      console.error("PesaJet collection response did not match the initiated request.");
+      console.error("Deposit response did not match the initiated request.");
       return Response.json({ error: "The payment provider returned an unexpected response. Check Records before retrying." }, { status: 502 });
     }
 
@@ -69,20 +70,21 @@ export async function POST(request: Request) {
       p_transaction_id: deposit.transaction_id,
       p_provider_transaction_id: payment.transactionId,
       p_provider_status: payment.status,
+      p_provider: payment.provider,
     });
-    if (recordError) console.error("PesaJet deposit response could not be recorded.", recordError.message);
+    if (recordError) console.error("Deposit response could not be recorded.", recordError.message);
 
     return Response.json({
       transactionId: deposit.transaction_id,
       providerTransactionId: payment.transactionId,
       status: payment.status,
-      phoneNumber: pesajet.utils.formatPhoneNumber(deposit.phone_number),
+      phoneNumber: deposit.phone_number,
     }, { status: 202 });
   } catch (error) {
     if (error instanceof PaymentConfigError) {
       return Response.json({ error: "Payment service is not configured." }, { status: 503 });
     }
-    console.error("PesaJet deposit initiation failed.", error instanceof Error ? error.message : "Unknown error");
+    console.error("Deposit initiation failed.", error instanceof Error ? error.message : "Unknown error");
     return Response.json({ error: "The payment prompt could not be confirmed. Check your records before retrying." }, { status: 502 });
   }
 }

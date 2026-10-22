@@ -176,7 +176,7 @@ export function AuthScreen() {
         Language
       </button>
 
-      <div className="relative z-10 flex min-h-screen flex-col justify-end">
+      <div className="relative py-3 z-10 flex min-h-screen flex-col justify-end">
         <div className="mx-[13px] mb-[13px] mt-[42vh]">
           <div className="rounded-[28px] border border-white/60 px-[21.5px] pb-[23px] pt-[31px] text-ink shadow-[0_18px_44px_-18px_rgba(10,50,140,0.45)] backdrop-blur-md"
             style={{

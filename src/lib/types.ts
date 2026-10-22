@@ -17,6 +17,11 @@ export type Product = {
   active: boolean;
 };
 
+export type CommunityLinks = {
+  serviceChatUrl: string;
+  telegramGroupUrl: string;
+};
+
 export type Investment = {
   id: string;
   user_id: string;
@@ -40,6 +45,7 @@ export type PaymentProvider = "mtn" | "airtel";
 export type Transaction = {
   id: string;
   user_id: string;
+  member_phone?: string | null;
   kind: TransactionKind;
   amount: number;
   status: "pending" | "processing" | "approved" | "rejected";
@@ -50,12 +56,13 @@ export type Transaction = {
   payment_provider?: PaymentProvider | null;
   payment_reference?: string | null;
   provider_transaction_id?: string | null;
+  failure_reason?: string | null;
   created_at: string;
 };
 
 export type PendingWithdrawal = Pick<
   Transaction,
-  "id" | "user_id" | "amount" | "fee" | "net_amount" | "payment_phone" | "payment_provider" | "payment_reference" | "provider_transaction_id" | "status" | "created_at"
+  "id" | "user_id" | "member_phone" | "amount" | "fee" | "net_amount" | "payment_phone" | "payment_provider" | "payment_reference" | "provider_transaction_id" | "failure_reason" | "status" | "created_at"
 >;
 
 export type BankAccount = {

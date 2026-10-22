@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const serviceClient = createServiceRoleClient();
     const { error } = await serviceClient.rpc("apply_pesajet_webhook", { p_payload: event });
     if (error) {
-      console.error("PesaJet webhook could not be applied.", error.message);
+      console.error("Payment update could not be applied.", error.message);
       return Response.json({ error: "Webhook processing failed." }, { status: 500 });
     }
 

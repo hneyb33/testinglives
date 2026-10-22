@@ -221,6 +221,14 @@ export function IconHeadset(props: IconProps) {
   );
 }
 
+export function IconTelegram(props: IconProps) {
+  return (
+    <svg {...base(props)} fill="currentColor" stroke="none">
+      <path d="M21.7 4.3 18.5 20c-.2 1.1-.9 1.4-1.8.9l-5-3.7-2.4 2.3c-.3.3-.6.6-1.2.6l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L5.7 13.7.8 12.2c-1.1-.3-1.1-1 .2-1.5L20 3.4c.9-.3 1.8.2 1.7.9Z" />
+    </svg>
+  );
+}
+
 export function IconInfo(props: IconProps) {
   return (
     <svg {...base(props)}>

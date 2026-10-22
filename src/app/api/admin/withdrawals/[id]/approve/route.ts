@@ -4,7 +4,7 @@ type PayoutRequest = {
   transaction_id: string;
   reference: string;
   phone_number: string;
-  provider: "mtn" | "airtel";
+  provider: "mtn" | "airtel" | null;
   amount: number;
 };
 
@@ -37,7 +37,7 @@ export async function POST(
       amount: Number(payout.amount),
       currency: "UGX",
       phoneNumber: pesajet.utils.formatPhoneNumber(payout.phone_number),
-      provider: payout.provider,
+      ...(payout.provider ? { provider: payout.provider } : {}),
       reference: payout.reference,
       description: "Testing Lives approved withdrawal",
       idempotencyKey: payout.reference,
@@ -46,12 +46,12 @@ export async function POST(
     if (
       result.type !== "DISBURSEMENT" || Number(result.amount) !== Number(payout.amount) ||
       result.currency !== "UGX" || result.reference !== payout.reference ||
-      result.provider !== payout.provider
+      (payout.provider && result.provider !== payout.provider)
     ) {
-      console.error("PesaJet disbursement response did not match the approved request.");
+      console.error("Withdrawal response did not match the approved request.");
       return Response.json({
         status: "processing",
-        message: "Provider response did not match the approved payout. Check PesaJet status before retrying.",
+        message: "Provider response did not match the approved payout. Check the transaction status before retrying.",
       }, { status: 202 });
     }
 
@@ -60,8 +60,9 @@ export async function POST(
       p_provider_transaction_id: result.transactionId,
       p_provider_status: result.status,
       p_failure_reason: result.failureReason ?? null,
+      p_provider: result.provider,
     });
-    if (recordError) console.error("PesaJet payout response could not be recorded.", recordError.message);
+    if (recordError) console.error("Withdrawal response could not be recorded.", recordError.message);
 
     return Response.json({
       transactionId: payout.transaction_id,
@@ -72,10 +73,10 @@ export async function POST(
     if (error instanceof PaymentConfigError) {
       return Response.json({ error: "Payment service is not configured." }, { status: 503 });
     }
-    console.error("PesaJet withdrawal initiation failed.", error instanceof Error ? error.message : "Unknown error");
+    console.error("Withdrawal initiation failed.", error instanceof Error ? error.message : "Unknown error");
     return Response.json({
       status: "processing",
-      message: "Approval is recorded, but provider confirmation is pending. Retry uses the same payout reference; verify provider status before manual action.",
+      message: "Approval is recorded, but payment confirmation is pending. Retry uses the same transaction reference.",
     }, { status: 202 });
   }
 }

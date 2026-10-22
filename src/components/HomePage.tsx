@@ -1,195 +1,202 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-import { fetchInvestments, fetchProducts, formatMoney } from "@/lib/app-data";
-import type { Product } from "@/lib/types";
+import {
+  claimDailyIncome,
+  daysElapsed,
+  fetchCommunityLinks,
+  fetchInvestments,
+  fetchProducts,
+  formatMoney,
+} from "@/lib/app-data";
+import type { CommunityLinks, Investment, Product } from "@/lib/types";
 import { useApp } from "./AppContext";
-import { IconDeposit, IconEye, IconEyeOff, IconInfo, IconRecords, IconWithdraw } from "./Icons";
+import {
+  IconDeposit,
+  IconHeadset,
+  IconTelegram,
+  IconWithdraw,
+} from "./Icons";
 import { InvestSheet } from "./InvestSheet";
 
+const CAROUSEL_IMAGES = [
+  { src: "/images/plan1.jpg", alt: "HIV testing awareness" },
+  { src: "/images/plan3.jpg", alt: "World AIDS Day awareness" },
+  { src: "/images/plan4.jpg", alt: "Know your status and protect your health" },
+];
+
+const EMPTY_LINKS: CommunityLinks = {
+  serviceChatUrl: "",
+  telegramGroupUrl: "",
+};
+
+type HomeTab = "earnings" | "plans";
+
 export function HomePage() {
-  const { profile, balanceVisible, toggleBalanceVisible, navigate, toast } = useApp();
+  const { profile, navigate, toast, refreshProfile } = useApp();
   const [products, setProducts] = useState<Product[]>([]);
+  const [investments, setInvestments] = useState<Investment[]>([]);
+  const [communityLinks, setCommunityLinks] = useState(EMPTY_LINKS);
   const [purchaseCounts, setPurchaseCounts] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<Product | null>(null);
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [activeTab, setActiveTab] = useState<HomeTab>("plans");
   const [loading, setLoading] = useState(true);
+  const [claiming, setClaiming] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setActiveSlide((current) => (current + 1) % CAROUSEL_IMAGES.length);
+    }, 4500);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let active = true;
     const userId = profile?.id;
-    (async () => {
-      try {
-        const client = getSupabaseBrowserClient();
-        const list = await fetchProducts(client);
-        if (active) setProducts(list);
-        if (userId) {
-          const investments = await fetchInvestments(client, userId);
-          if (active) {
-            setPurchaseCounts(investments.reduce<Record<string, number>>((counts, investment) => {
-              counts[investment.product_id] = (counts[investment.product_id] ?? 0) + 1;
-              return counts;
-            }, {}));
-          }
-        }
-      } catch {
-        if (active) toast("Could not load products.", "error");
-      } finally {
+    const client = getSupabaseBrowserClient();
+
+    void Promise.all([
+      fetchProducts(client),
+      userId ? fetchInvestments(client, userId) : Promise.resolve([]),
+    ])
+      .then(([list, userInvestments]) => {
+        if (!active) return;
+        setProducts(list);
+        setInvestments(userInvestments);
+        setPurchaseCounts(userInvestments.reduce<Record<string, number>>((counts, investment) => {
+          counts[investment.product_id] = (counts[investment.product_id] ?? 0) + 1;
+          return counts;
+        }, {}));
+      })
+      .catch(() => {
+        if (active) toast("Could not load test plans.", "error");
+      })
+      .finally(() => {
         if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
+      });
+
+    void fetchCommunityLinks(client)
+      .then((links) => { if (active) setCommunityLinks(links); })
+      .catch(() => {
+        if (active) toast("Community contact links could not be loaded.", "error");
+      });
+
+    return () => { active = false; };
   }, [profile?.id, toast]);
 
-  const balance = profile?.balance ?? 0;
+  async function claimEarnings(investment: Investment) {
+    setClaiming(investment.id);
+    try {
+      const amount = await claimDailyIncome(getSupabaseBrowserClient(), investment.id);
+      await refreshProfile();
+      const updated = await fetchInvestments(getSupabaseBrowserClient(), investment.user_id);
+      setInvestments(updated);
+      toast(`UGX ${formatMoney(amount)} added to your balance.`);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Daily earnings could not be claimed.", "error");
+    } finally {
+      setClaiming(null);
+    }
+  }
 
   return (
-    <div className="pb-[92px]">
-      <header className="relative h-[150px] w-full overflow-hidden">
-        <Image
-          src="/images/app/auth-hero.jpg"
-          alt=""
-          fill
-          priority
-          className="object-cover"
-          sizes="480px"
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/70 via-primary-mid/40 to-transparent" />
-        <div className="absolute left-[18px] top-[22px] text-white">
-          <p className="m-0 text-[13px] font-medium text-white/85">Welcome to Testing Lives</p>
-          <p className="m-0 mt-[2px] text-[17px] font-bold">{profile?.phone ?? "Community member"}</p>
+    <main className="min-h-screen pb-[92px]">
+      <section aria-label="HIV awareness carousel" className="relative mx-[15px] mt-[14px] aspect-[1.95/1] overflow-hidden rounded-2xl bg-white shadow-[0_3px_12px_rgba(30,50,120,0.12)]">
+        {CAROUSEL_IMAGES.map((slide, index) => (
+          <Image
+            key={slide.src}
+            src={slide.src}
+            alt={slide.alt}
+            fill
+            priority={index === 0}
+            sizes="450px"
+            className={`object-cover transition-opacity duration-700 ${activeSlide === index ? "opacity-100" : "opacity-0"}`}
+          />
+        ))}
+        <div className="absolute inset-x-0 bottom-0 flex justify-center gap-2 bg-gradient-to-t from-black/35 to-transparent pb-3 pt-8">
+          {CAROUSEL_IMAGES.map((slide, index) => (
+            <button
+              key={slide.src}
+              type="button"
+              onClick={() => setActiveSlide(index)}
+              aria-label={`Show awareness slide ${index + 1}`}
+              aria-current={activeSlide === index}
+              className={`h-2 rounded-full border-0 p-0 transition-all ${activeSlide === index ? "w-7 bg-white" : "w-2 bg-white/65"}`}
+            />
+          ))}
         </div>
-        <button
-          type="button"
-          onClick={() => navigate("/about")}
-          className="absolute right-[16px] top-[18px] rounded-full bg-white/20 p-2 text-white backdrop-blur-sm"
-          aria-label="About Testing Lives"
-        >
-          <IconInfo width={21} height={21} />
-        </button>
-      </header>
-
-      <section className="relative z-10 mx-[15px] -mt-[98px] flex h-[82px] items-center justify-between rounded-2xl px-5 text-white shadow-[0_12px_26px_-14px_rgba(7,60,180,0.7)]"
-        style={{ background: "linear-gradient(180deg,#5a91ec 0%,#1a66e6 100%)" }}
-      >
-        <div>
-          <p className="m-0 flex items-center gap-2 text-[12.5px] font-medium text-white/85">
-            Total Balance (UGX)
-            <button type="button" onClick={toggleBalanceVisible} className="text-white/90" aria-label="Toggle balance visibility">
-              {balanceVisible ? <IconEyeOff width={17} height={17} /> : <IconEye width={17} height={17} />}
-            </button>
-          </p>
-          <p className="m-0 mt-[5px] text-[24px] font-bold leading-none tracking-tight">
-            {balanceVisible ? formatMoney(balance) : "****"}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => navigate("/records")}
-          className="rounded-full bg-white/20 px-3.5 py-1.5 text-[12px] font-semibold text-white backdrop-blur-sm"
-        >
-          Records
-        </button>
       </section>
 
-      <section className="mx-[15px] mt-[16px] grid grid-cols-3 gap-[10px]">
+      <section aria-label="Quick actions" className="mx-[15px] mt-[14px] grid grid-cols-4 rounded-2xl bg-white px-2 py-3 shadow-[0_2px_10px_rgba(30,50,120,0.08)]">
         <QuickAction
-          icon={<IconDeposit className="text-primary" width={26} height={26} />}
           label="Deposit"
+          icon={<IconDeposit width={25} height={25} />}
+          color="bg-[#38c783]"
           onClick={() => navigate("/deposit")}
         />
         <QuickAction
-          icon={<IconWithdraw className="text-primary" width={26} height={26} />}
           label="Withdraw"
+          icon={<IconWithdraw width={25} height={25} />}
+          color="bg-[#f2a62b]"
           onClick={() => navigate("/withdraw")}
         />
         <QuickAction
-          icon={<IconRecords className="text-primary" width={26} height={26} />}
-          label="Records"
-          onClick={() => navigate("/records")}
+          label="Service"
+          icon={<IconHeadset width={25} height={25} />}
+          color="bg-[#4b83ec]"
+          href={communityLinks.serviceChatUrl}
+          onClick={() => toast("The service chat link has not been set by an administrator yet.", "error")}
+        />
+        <QuickAction
+          label="Group"
+          icon={<IconTelegram width={25} height={25} />}
+          color="bg-[#8050e9]"
+          href={communityLinks.telegramGroupUrl}
+          onClick={() => toast("The Telegram group link has not been set by an administrator yet.", "error")}
         />
       </section>
 
-      <section className="relative mx-[15px] mt-[16px] aspect-[3/2] overflow-hidden rounded-xl bg-white">
-        <Image
-          src="/images/about-us.jpg"
-          alt="Testing Lives promotes voluntary HIV testing, qualified care, clear referral terms, and confidential results."
-          fill
-          className="object-contain"
-          sizes="450px"
-        />
-      </section>
+      <div role="tablist" aria-label="Home content" className="mx-[15px] mt-[14px] grid grid-cols-2 rounded-2xl border border-[#6a809c] bg-white p-[6px]">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "earnings"}
+          onClick={() => setActiveTab("earnings")}
+          className={`h-[44px] rounded-xl text-[14px] font-medium transition-colors ${activeTab === "earnings" ? "bg-primary text-white shadow-sm" : "bg-transparent text-ink-soft"}`}
+        >
+          Daily Earnings
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "plans"}
+          onClick={() => setActiveTab("plans")}
+          className={`h-[44px] rounded-xl text-[14px] font-medium transition-colors ${activeTab === "plans" ? "bg-primary text-white shadow-sm" : "bg-transparent text-ink-soft"}`}
+        >
+          Test Plans
+        </button>
+      </div>
 
-      <p className="mx-[18px] mb-0 mt-3 text-[12px] leading-relaxed text-ink-soft">
-        We share trusted HIV awareness information. Testing and medical care are always voluntary choices made with qualified providers.
-      </p>
-
-      <section className="mt-[20px] px-[15px]">
-        <div className="mb-[12px] flex items-end justify-between">
-          <h2 className="m-0 text-[18px] font-extrabold text-ink">Community plans</h2>
-          <span className="text-[12px] font-medium text-muted">{products.length} plans</span>
-        </div>
-        <p className="mb-3 mt-0 text-[12px] leading-relaxed text-muted">Plan and referral terms are separate from healthcare. No referral reward is based on HIV status or test results.</p>
-        {loading ? (
-          <div className="grid grid-cols-2 gap-[12px]">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="h-[260px] animate-pulse rounded-2xl bg-white/70" />
-            ))}
-          </div>
+      <section role="tabpanel" className="mt-[14px] px-[15px]">
+        {activeTab === "plans" ? (
+          <TestPlans
+            products={products}
+            purchaseCounts={purchaseCounts}
+            loading={loading}
+            onSelect={setSelected}
+          />
         ) : (
-          <div className="grid grid-cols-2 gap-[12px]">
-            {products.map((product) => (
-              <article
-                key={product.id}
-                className="overflow-hidden rounded-2xl border border-line-blue/50 bg-white shadow-[0_2px_10px_rgba(30,50,120,0.08)]"
-              >
-                <div className="relative h-[104px] w-full">
-                  <Image
-                    src={product.image}
-                    alt={product.name}
-                    fill
-                    className="object-cover"
-                    sizes="220px"
-                  />
-                </div>
-                <div className="p-[11px]">
-                  <p className="m-0 truncate text-[14px] font-bold text-ink">{product.name}</p>
-                  <p className="m-0 mt-[3px] text-[12px] text-muted">
-                    Price{" "}
-                    <span className="font-semibold text-primary">
-                      UGX {formatMoney(product.price)}
-                    </span>
-                  </p>
-                  <p className="m-0 mt-[1px] text-[12px] text-muted">
-                    Daily earnings{" "}
-                    <span className="font-semibold text-success">
-                      +{formatMoney(product.daily_income)}
-                    </span>
-                  </p>
-                  <p className="m-0 mt-[1px] text-[12px] text-muted">
-                    Duration <span className="font-semibold text-ink">{product.duration_days} days</span>
-                  </p>
-                  <p className="m-0 mt-[1px] text-[12px] text-muted">
-                    Total <span className="font-semibold text-primary">UGX {formatMoney(product.daily_income * product.duration_days)}</span>
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setSelected(product)}
-                    disabled={(purchaseCounts[product.id] ?? 0) >= 3}
-                    className="mt-[9px] h-[32px] w-full rounded-full bg-gradient-to-br from-[#0a56e3] via-[#2f72ea] to-[#5b91ee] text-[13px] font-bold text-white disabled:bg-muted"
-                  >
-                    {(purchaseCounts[product.id] ?? 0) >= 3 ? "Limit reached" : "View plan"}
-                  </button>
-                  <p className="m-0 mt-1 text-center text-[10px] text-muted">
-                    {purchaseCounts[product.id] ?? 0}/3 purchased
-                  </p>
-                </div>
-              </article>
-            ))}
-          </div>
+          <DailyEarnings
+            investments={investments}
+            loading={loading}
+            claiming={claiming}
+            onClaim={(investment) => void claimEarnings(investment)}
+            onViewAll={() => navigate("/income")}
+            onBrowsePlans={() => setActiveTab("plans")}
+          />
         )}
       </section>
 
@@ -197,34 +204,211 @@ export function HomePage() {
         <InvestSheet
           product={selected}
           onClose={() => setSelected(null)}
-          onSuccess={() => setPurchaseCounts((counts) => ({
-            ...counts,
-            [selected.id]: (counts[selected.id] ?? 0) + 1,
-          }))}
+          onSuccess={() => {
+            setPurchaseCounts((counts) => ({
+              ...counts,
+              [selected.id]: (counts[selected.id] ?? 0) + 1,
+            }));
+            if (profile?.id) {
+              void fetchInvestments(getSupabaseBrowserClient(), profile.id)
+                .then(setInvestments)
+                .catch(() => toast("Your plan progress could not be refreshed.", "error"));
+            }
+          }}
         />
       )}
-    </div>
+    </main>
   );
 }
 
 function QuickAction({
   icon,
   label,
+  color,
   onClick,
+  href,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
+  color: string;
   onClick: () => void;
+  href?: string;
 }) {
+  const content = (
+    <>
+      <span className={`grid h-[56px] w-[56px] place-items-center rounded-full text-white shadow-[0_5px_10px_rgba(30,50,120,0.18)] ${color}`}>
+        {icon}
+      </span>
+      <span className="mt-1 text-[12px] font-semibold leading-tight text-ink">{label}</span>
+    </>
+  );
+  const className = "flex min-w-0 flex-col items-center justify-center rounded-xl py-1 text-center transition-transform active:scale-[0.97]";
+
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
+        {content}
+      </a>
+    );
+  }
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex h-[86px] flex-col items-center justify-center gap-[8px] rounded-2xl border border-line-blue/50 bg-white text-ink shadow-[0_2px_10px_rgba(30,50,120,0.08)] transition-transform active:scale-[0.97]"
-    >
-      {icon}
-      <span className="text-[12.5px] font-semibold">{label}</span>
+    <button type="button" onClick={onClick} className={className}>
+      {content}
     </button>
   );
 }
 
+function TestPlans({
+  products,
+  purchaseCounts,
+  loading,
+  onSelect,
+}: {
+  products: Product[];
+  purchaseCounts: Record<string, number>;
+  loading: boolean;
+  onSelect: (product: Product) => void;
+}) {
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        {[0, 1, 2].map((index) => <div key={index} className="h-[214px] animate-pulse rounded-2xl bg-white/80" />)}
+      </div>
+    );
+  }
+
+  if (products.length === 0) {
+    return <p className="m-0 rounded-2xl bg-white px-4 py-6 text-center text-[13px] text-muted">No test plans are available right now.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      <h1 className="m-0 text-[18px] font-extrabold text-ink">Test plans</h1>
+      <p className="m-0 text-[12px] leading-relaxed text-muted">Plan and referral terms are separate from healthcare. Testing is voluntary, and test results stay private.</p>
+      {products.map((product) => {
+        const purchaseCount = purchaseCounts[product.id] ?? 0;
+        const limitReached = purchaseCount >= 3;
+        return (
+          <article key={product.id} className="grid grid-cols-[40%_1fr] gap-x-3 gap-y-3 rounded-2xl bg-white p-3 shadow-[0_2px_10px_rgba(30,50,120,0.08)]">
+            <div className="relative min-h-[160px] overflow-hidden rounded-xl bg-page">
+              <Image src={product.image} alt={product.name} fill sizes="180px" className="object-cover" />
+              <span className="absolute left-0 top-0 rounded-br-lg bg-primary/90 px-2 py-1 text-[10px] font-medium text-white">
+                Times {purchaseCount}/3
+              </span>
+              <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-2 pt-7 text-[12px] font-semibold text-white">
+                {product.name}
+              </span>
+            </div>
+            <dl className="m-0 flex min-w-0 flex-col justify-between gap-1 text-[12px]">
+              <PlanValue label="Price" value={`UGX ${formatMoney(product.price)}`} />
+              <PlanValue label="Daily earnings" value={`UGX ${formatMoney(product.daily_income)}`} emphasis="success" />
+              <PlanValue label="Days" value={String(product.duration_days)} />
+              <PlanValue label="Total earnings" value={`UGX ${formatMoney(product.daily_income * product.duration_days)}`} emphasis="primary" />
+            </dl>
+            <button
+              type="button"
+              onClick={() => onSelect(product)}
+              disabled={limitReached}
+              className="col-span-2 h-[40px] rounded-lg bg-primary text-[13px] font-semibold text-white disabled:bg-muted"
+            >
+              {limitReached ? "Purchase limit reached" : "Buy now"}
+            </button>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function PlanValue({ label, value, emphasis }: { label: string; value: string; emphasis?: "success" | "primary" }) {
+  const valueColor = emphasis === "success" ? "text-success" : emphasis === "primary" ? "text-primary" : "text-[#245a9d]";
+  return (
+    <div className="flex min-h-[32px] items-center justify-between gap-1 rounded-lg bg-[#f3f6fc] px-2">
+      <dt className="min-w-0 truncate text-ink-soft">{label}</dt>
+      <dd className={`m-0 shrink-0 text-right font-bold ${valueColor}`}>{value}</dd>
+    </div>
+  );
+}
+
+function DailyEarnings({
+  investments,
+  loading,
+  claiming,
+  onClaim,
+  onViewAll,
+  onBrowsePlans,
+}: {
+  investments: Investment[];
+  loading: boolean;
+  claiming: string | null;
+  onClaim: (investment: Investment) => void;
+  onViewAll: () => void;
+  onBrowsePlans: () => void;
+}) {
+  const activeInvestments = investments.filter((investment) => investment.status === "active");
+  const dailyTotal = activeInvestments.reduce((total, investment) => total + investment.daily_income, 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl bg-white p-4 shadow-[0_2px_10px_rgba(30,50,120,0.08)]">
+        <p className="m-0 text-[12px] font-medium text-ink-soft">Potential daily earnings</p>
+        <p className="m-0 mt-1 text-[24px] font-extrabold text-primary">UGX {formatMoney(dailyTotal)}</p>
+        <p className="m-0 mt-1 text-[11px] text-muted">Across your active test plans</p>
+      </div>
+      {loading ? (
+        <div className="h-[155px] animate-pulse rounded-2xl bg-white/80" />
+      ) : investments.length === 0 ? (
+        <div className="rounded-2xl bg-white px-4 py-6 text-center">
+          <p className="m-0 text-[13px] font-semibold text-ink">No invested test plans yet</p>
+          <button type="button" onClick={onBrowsePlans} className="mt-3 rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-white">Browse test plans</button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {investments.map((investment) => {
+            const elapsedDays = daysElapsed(investment.started_at, investment.ends_at);
+            const progressDays = Math.min(investment.duration_days, elapsedDays);
+            const availableDays = Math.max(0, progressDays - investment.claimed_days);
+            const progress = Math.round((progressDays / investment.duration_days) * 100);
+            return (
+              <article key={investment.id} className="rounded-2xl bg-white p-4 shadow-[0_2px_10px_rgba(30,50,120,0.08)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="m-0 text-[14px] font-bold text-ink">{investment.product?.name ?? "Test plan"}</h2>
+                    <p className="m-0 mt-1 text-[11px] text-muted">UGX {formatMoney(investment.amount)} · {investment.duration_days} days</p>
+                  </div>
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${investment.status === "active" ? "bg-success/10 text-success" : "bg-page text-muted"}`}>
+                    {investment.status === "active" ? "Active" : "Completed"}
+                  </span>
+                </div>
+                <div className="mt-3 flex items-center justify-between text-[11px]">
+                  <span className="text-muted">Earning progress</span>
+                  <span className="font-semibold text-ink">{progressDays}/{investment.duration_days} days</span>
+                </div>
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-page">
+                  <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+                </div>
+                <p className="mb-0 mt-2 text-[11px] text-muted">
+                  Claimed {investment.claimed_days} days · {availableDays > 0 ? `${availableDays} day(s) ready` : "Next earnings unlock after 24 hours"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onClaim(investment)}
+                  disabled={availableDays < 1 || investment.status !== "active" || claiming === investment.id}
+                  className="mt-3 h-10 w-full rounded-lg bg-primary text-[12px] font-semibold text-white disabled:bg-muted"
+                >
+                  {claiming === investment.id ? "Claiming..." : availableDays > 0 ? `Claim UGX ${formatMoney(availableDays * investment.daily_income)}` : "No earnings ready"}
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      )}
+      {investments.length > 0 && (
+        <button type="button" onClick={onViewAll} className="h-10 w-full rounded-lg border border-primary/30 bg-white text-[12px] font-semibold text-primary">
+          View full earnings and test verification
+        </button>
+      )}
+    </div>
+  );
+}
