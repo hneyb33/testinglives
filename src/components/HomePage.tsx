@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import {
@@ -217,7 +217,97 @@ export function HomePage() {
           }}
         />
       )}
+      {profile?.id && (
+        <WelcomeDialog
+          userId={profile.id}
+          groupUrl={communityLinks.telegramGroupUrl}
+          serviceUrl={communityLinks.serviceChatUrl}
+          onStorageError={() => toast("The welcome notice may appear again next time.", "error")}
+        />
+      )}
     </main>
+  );
+}
+
+function WelcomeDialog({
+  userId,
+  groupUrl,
+  serviceUrl,
+  onStorageError,
+}: {
+  userId: string;
+  groupUrl: string;
+  serviceUrl: string;
+  onStorageError: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    try {
+      if (window.localStorage.getItem(`testinglives-welcome-dismissed:${userId}`) === "true") return;
+    } catch {
+      dialog.showModal();
+      return;
+    }
+    dialog.showModal();
+  }, [userId]);
+
+  function dismiss() {
+    try {
+      window.localStorage.setItem(`testinglives-welcome-dismissed:${userId}`, "true");
+    } catch {
+      onStorageError();
+    }
+    dialogRef.current?.close();
+  }
+
+  return (
+    <dialog ref={dialogRef} aria-labelledby="welcome-title" className="m-auto max-h-[calc(100%-32px)] w-[calc(100%-32px)] max-w-[420px] overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl backdrop:bg-ink/60 backdrop:backdrop-blur-sm">
+        <div className="mb-4 flex items-center gap-3">
+          <Image src="/images/logo.jpg" alt="Testing Lives logo" width={56} height={56} className="h-14 w-14 rounded-full object-cover" />
+          <div className="min-w-0 flex-1">
+            <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-primary">Testing Lives</p>
+            <h2 id="welcome-title" className="m-0 mt-1 text-[20px] font-bold text-ink">Welcome</h2>
+          </div>
+          <button type="button" onClick={dismiss} className="rounded-lg px-3 py-2 text-[12px] font-semibold text-muted" aria-label="Close welcome message">
+            Close
+          </button>
+        </div>
+        <p className="m-0 mb-4 text-[13px] leading-relaxed text-ink-soft">A quick guide to your account and the current withdrawal terms.</p>
+        <dl className="divide-y divide-line-blue rounded-xl border border-line-blue text-[13px] text-ink-soft">
+          <WelcomeRow label="Plan earnings" value="Follow the terms shown for each active plan." />
+          <WelcomeRow label="Withdrawal hours" value="09:00–21:00 Kampala time" />
+          <WelcomeRow label="Minimum withdrawal" value="UGX 5,000" />
+          <WelcomeRow label="Withdrawal fee" value="20%" />
+          <WelcomeRow label="Payout review" value="An administrator reviews requests before payment." />
+        </dl>
+        <p className="mb-0 mt-4 text-center text-[13px] leading-relaxed text-ink-soft">Official support will never ask for your password or screenshots of your deposits. Keep your account details private.</p>
+        <div className="mt-4 grid gap-2">
+          {groupUrl ? (
+            <a href={groupUrl} target="_blank" rel="noopener noreferrer" className="flex min-h-12 items-center justify-center rounded-xl bg-primary px-4 text-[14px] font-bold text-white">
+              Join the Telegram group
+            </a>
+          ) : (
+            <p className="m-0 rounded-xl bg-page px-4 py-3 text-center text-[12px] text-muted">The community group link is not available yet.</p>
+          )}
+          {serviceUrl && (
+            <a href={serviceUrl} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center rounded-xl border border-primary/30 px-4 text-[13px] font-semibold text-primary">
+              Contact service
+            </a>
+          )}
+        </div>
+    </dialog>
+  );
+}
+
+function WelcomeRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 px-3 py-3">
+      <dt className="font-medium">{label}</dt>
+      <dd className="m-0 max-w-[60%] text-right font-semibold text-ink">{value}</dd>
+    </div>
   );
 }
 
@@ -312,7 +402,7 @@ function TestPlans({
               disabled={limitReached}
               className="col-span-2 h-[40px] rounded-lg bg-primary text-[13px] font-semibold text-white disabled:bg-muted"
             >
-              {limitReached ? "Purchase limit reached" : "Buy now"}
+              {limitReached ? "Test limit reached" : "Test"}
             </button>
           </article>
         );

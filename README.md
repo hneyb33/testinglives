@@ -6,7 +6,7 @@ Community HIV awareness and referral portal built with Next.js, Tailwind CSS, an
 
 1. Create a Supabase project and enable email authentication.
 2. Copy `.env.example` to `.env.local`.
-3. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local` using the project URL and publishable/anon key from Supabase.
+3. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_SITE_URL` in `.env.local`. Use your deployed public URL for `NEXT_PUBLIC_SITE_URL` so shared referral links have a reachable Open Graph preview.
 4. Add your local app URL (for example, `http://localhost:3000`) to the Supabase Auth URL configuration. Configure the allowed redirect URLs for account confirmation and password recovery.
 5. Install dependencies and start the development server:
 
@@ -24,6 +24,10 @@ The first profile can register without an invitation code. Later registrations r
 Members enter the amount and Uganda mobile number for a deposit; the payment prompt is sent to that phone and the balance is credited only after confirmation. Withdrawals require the destination phone and amount, start at UGX 5,000, are accepted from 9:00 AM to 9:00 PM Africa/Kampala time, carry a 20% fee, and reserve the gross amount while pending. Admins approve or decline withdrawals in the account payout-review page; approved payments are sent to the requested number, while declined or failed withdrawals are refunded. Members can view their transaction status and phone in Records. Admins can inspect the full transaction log from My account. An administrator must call `public.review_test_completion(investment_id, approve)` to verify test completion; the caller must have the `admin` app-metadata role.
 
 The portal supports email/password sign-in, account creation, email-based password recovery, and sign-out. Auth data is sent directly to Supabase Auth; passwords are not stored by the Next.js app.
+
+## Installable app
+
+The app provides a web manifest and Testing Lives home-screen icons. Use **Download app** from the sign-in screen or **My account → Install app** on a supported browser; on iPhone or iPad, open the page in Safari, tap **Share**, then **Add to Home Screen**. Production installation requires HTTPS.
 
 ## PesaJet payments
 

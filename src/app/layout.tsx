@@ -8,9 +8,29 @@ const roboto = Roboto({
   variable: "--font-roboto",
 });
 
+const metadataBase = new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://testinglives.com");
+
 export const metadata: Metadata = {
+  metadataBase,
   title: "Testing Lives",
   description: "Respectful HIV awareness and testing information for every community.",
+  openGraph: {
+    type: "website",
+    title: "Testing Lives",
+    description: "Respectful HIV awareness and testing information for every community.",
+    images: [{ url: "/images/logo.jpg", alt: "Testing Lives" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Testing Lives",
+    description: "Respectful HIV awareness and testing information for every community.",
+    images: ["/images/logo.jpg"],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "Testing Lives",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {
@@ -19,6 +39,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
+  themeColor: "#095ae7",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

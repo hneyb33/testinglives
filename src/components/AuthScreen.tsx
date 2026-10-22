@@ -4,14 +4,17 @@ import { useEffect, useState, type FormEvent } from "react";
 import Image from "next/image";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import {
+  legacyPhoneToEmail,
   phoneToEmail,
   registrationRequiresReferral,
   referralCodeExists,
 } from "@/lib/app-data";
+import { normalizeUgandaPhone } from "@/lib/phone";
 import { DIAL_CODE } from "@/lib/types";
 import { useApp } from "./AppContext";
 import { IconEye, IconEyeOff, IconGift, IconGlobe, IconInfo, IconLock } from "./Icons";
 import { LanguageSheet } from "./LanguageSheet";
+import { InstallAppButton } from "./InstallAppButton";
 
 type AuthTab = "login" | "register";
 
@@ -62,8 +65,9 @@ export function AuthScreen() {
   async function handleLogin(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    if (!phone.trim()) {
-      setError("Enter your phone number.");
+    const normalizedPhone = normalizeUgandaPhone(phone);
+    if (!normalizedPhone) {
+      setError("Enter a valid Uganda phone number.");
       return;
     }
     if (!password) {
@@ -73,10 +77,20 @@ export function AuthScreen() {
     setBusy(true);
     try {
       const client = getSupabaseBrowserClient();
-      const { error: authError } = await client.auth.signInWithPassword({
-        email: phoneToEmail(DIAL_CODE, phone),
+      const email = phoneToEmail(DIAL_CODE, normalizedPhone);
+      let { error: authError } = await client.auth.signInWithPassword({
+        email,
         password,
       });
+      if (authError && digitsOnly(phone).startsWith("0")) {
+        const legacyEmail = legacyPhoneToEmail(DIAL_CODE, phone);
+        if (legacyEmail !== email) {
+          ({ error: authError } = await client.auth.signInWithPassword({
+            email: legacyEmail,
+            password,
+          }));
+        }
+      }
       if (authError) throw new Error("Incorrect phone number or password.");
       if (!remember) {
         window.addEventListener("beforeunload", () => {
@@ -94,7 +108,8 @@ export function AuthScreen() {
   async function handleRegister(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    if (phone.trim().length < 9) {
+    const normalizedPhone = normalizeUgandaPhone(phone);
+    if (!normalizedPhone) {
       setError("Enter a valid phone number.");
       return;
     }
@@ -126,11 +141,11 @@ export function AuthScreen() {
       }
 
       const { data, error: authError } = await client.auth.signUp({
-        email: phoneToEmail(DIAL_CODE, phone),
+        email: phoneToEmail(DIAL_CODE, normalizedPhone),
         password,
         options: {
           data: {
-            phone: `${DIAL_CODE}${phone}`,
+            phone: normalizedPhone,
             invite_code: code || null,
           },
         },
@@ -167,14 +182,17 @@ export function AuthScreen() {
       />
       <div className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-black/10" />
 
-      <button
-        type="button"
-        onClick={() => setLangOpen(true)}
-        className="absolute right-2.5 top-3 z-20 inline-flex h-[37px] items-center gap-1.5 rounded-xl bg-white px-5 text-base text-primary shadow-[0_2px_8px_rgba(0,30,90,0.18)]"
-      >
-        <IconGlobe width={17} height={17} />
-        Language
-      </button>
+      <div className="absolute right-2.5 top-3 z-20 flex items-center gap-2">
+        <InstallAppButton />
+        <button
+          type="button"
+          onClick={() => setLangOpen(true)}
+          className="inline-flex h-[37px] items-center gap-1.5 rounded-xl bg-white px-3 text-sm text-primary shadow-[0_2px_8px_rgba(0,30,90,0.18)]"
+        >
+          <IconGlobe width={17} height={17} />
+          Language
+        </button>
+      </div>
 
       <div className="relative py-3 z-10 flex min-h-screen flex-col justify-end">
         <div className="mx-[13px] mb-[13px] mt-[42vh]">
@@ -184,6 +202,10 @@ export function AuthScreen() {
                 "linear-gradient(180deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.72) 45%, rgba(255,255,255,0.94) 100%)",
             }}
           >
+            <div className="mb-4 flex items-center gap-3">
+              <Image src="/images/logo.jpg" alt="Testing Lives logo" width={48} height={48} className="h-12 w-12 rounded-full object-cover" />
+              <span className="text-[15px] font-bold text-primary">Testing Lives</span>
+            </div>
             {tab === "login" ? (
               <form onSubmit={handleLogin} noValidate>
                 <h1 className="m-0 text-[26px] font-bold tracking-tight text-ink">Login</h1>
@@ -194,7 +216,7 @@ export function AuthScreen() {
                       type="tel"
                       inputMode="numeric"
                       autoComplete="tel"
-                      placeholder="Enter Username Number"
+                      placeholder="7XX XXX XXX or 07XX XXX XXX"
                       value={phone}
                       onChange={(e) => setPhone(digitsOnly(e.target.value))}
                       className="w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-muted"
@@ -255,7 +277,7 @@ export function AuthScreen() {
                       type="tel"
                       inputMode="numeric"
                       autoComplete="tel"
-                      placeholder="Enter Username Number"
+                      placeholder="7XX XXX XXX or 07XX XXX XXX"
                       value={phone}
                       onChange={(e) => setPhone(digitsOnly(e.target.value))}
                       className="w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-muted"

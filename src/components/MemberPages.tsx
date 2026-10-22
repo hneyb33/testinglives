@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Image from "next/image";
-import type { CommunityLinks, Investment, PendingWithdrawal, TeamMember, Transaction } from "@/lib/types";
+import type { CommunityLinks, Investment, PaymentProvider, PendingWithdrawal, TeamMember, Transaction } from "@/lib/types";
 import {
   approveWithdrawal,
   claimDailyIncome,
@@ -22,7 +22,9 @@ import {
   submitTestCompletion,
 } from "@/lib/app-data";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { detectUgandaMobileProvider, normalizeUgandaPhone } from "@/lib/phone";
 import { useApp } from "./AppContext";
+import { InstallAppButton } from "./InstallAppButton";
 import {
   IconBack,
   IconClock,
@@ -45,6 +47,8 @@ export function MemberPages({ path }: { path: string }) {
       return <SharePage />;
     case "/account":
       return <AccountPage />;
+    case "/admin":
+      return <AdminDashboardPage />;
     case "/deposit":
       return <DepositPage />;
     case "/withdraw":
@@ -65,7 +69,7 @@ export function MemberPages({ path }: { path: string }) {
   }
 }
 
-function PageFrame({ title, children }: { title: string; children: ReactNode }) {
+function PageFrame({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   const { navigate } = useApp();
   return (
     <main className="min-h-screen bg-page pb-24">
@@ -77,6 +81,7 @@ function PageFrame({ title, children }: { title: string; children: ReactNode }) 
           <p className="m-0 text-[11px] font-semibold uppercase text-primary">Testing Lives</p>
           <h1 className="m-0 mt-0.5 text-[20px] font-bold text-ink">{title}</h1>
         </div>
+        {action}
       </header>
       <div className="space-y-4 px-4 py-4">{children}</div>
     </main>
@@ -360,7 +365,14 @@ function AccountPage() {
   }
 
   return (
-    <PageFrame title="My account">
+    <PageFrame
+      title="My account"
+      action={user?.app_metadata?.role === "admin" ? (
+        <button type="button" onClick={() => navigate("/admin")} className="ml-auto rounded-lg bg-primary px-3 py-2 text-[12px] font-bold text-white">
+          Admin
+        </button>
+      ) : null}
+    >
       <Panel>
         <div className="flex items-center gap-3">
           <span className="grid h-12 w-12 place-items-center rounded-full bg-primary text-white"><IconTeam /></span>
@@ -372,25 +384,6 @@ function AccountPage() {
         <p className="mb-0 mt-1 text-[11px] text-muted">Available for test plans and withdrawals</p>
       </Panel>
       <ReferralCodePanel />
-      {user?.app_metadata?.role === "admin" && (
-        <>
-          <button type="button" onClick={() => navigate("/admin/withdrawals")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
-            <IconClock width={20} height={20} className="shrink-0 text-primary" />
-            <span className="flex-1">Payout review</span>
-            <IconChevronRight className="text-muted" />
-          </button>
-          <button type="button" onClick={() => navigate("/admin/settings")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
-            <IconInfo width={20} height={20} className="shrink-0 text-primary" />
-            <span className="flex-1">Community settings</span>
-            <IconChevronRight className="text-muted" />
-          </button>
-          <button type="button" onClick={() => navigate("/admin/transactions")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
-            <IconRecords width={20} height={20} className="shrink-0 text-primary" />
-            <span className="flex-1">All transactions</span>
-            <IconChevronRight className="text-muted" />
-          </button>
-        </>
-      )}
       <button type="button" onClick={() => navigate("/about")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
         <IconInfo width={20} height={20} className="shrink-0 text-primary" />
         <span className="flex-1">About Testing Lives</span>
@@ -404,8 +397,43 @@ function AccountPage() {
           </select>
         </label>
       </Panel>
+      <Panel title="Install app">
+        <p className="mb-3 mt-0 text-[12px] leading-relaxed text-muted">Add Testing Lives to your home screen for quick access.</p>
+        <InstallAppButton className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-[13px] font-bold text-white disabled:cursor-default disabled:opacity-70" />
+      </Panel>
       <PageButton disabled={busy} onClick={() => void signOut()}><IconLogout width={17} height={17} /> {busy ? "Signing out..." : "Sign out"}</PageButton>
       <p className="m-0 text-center text-[10px] text-muted">{user?.email}</p>
+    </PageFrame>
+  );
+}
+
+function AdminDashboardPage() {
+  const { user, navigate } = useApp();
+  const isAdmin = user?.app_metadata?.role === "admin";
+  if (!isAdmin) {
+    return <PageFrame title="Admin dashboard"><PageError message="Administrator access is required." /></PageFrame>;
+  }
+
+  return (
+    <PageFrame title="Admin dashboard">
+      <Panel>
+        <p className="m-0 text-[13px] leading-relaxed text-ink-soft">Manage member payouts, community links, and transaction records.</p>
+      </Panel>
+      <button type="button" onClick={() => navigate("/admin/withdrawals")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
+        <IconClock width={20} height={20} className="shrink-0 text-primary" />
+        <span className="flex-1">Payout review</span>
+        <IconChevronRight className="text-muted" />
+      </button>
+      <button type="button" onClick={() => navigate("/admin/settings")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
+        <IconInfo width={20} height={20} className="shrink-0 text-primary" />
+        <span className="flex-1">Community settings</span>
+        <IconChevronRight className="text-muted" />
+      </button>
+      <button type="button" onClick={() => navigate("/admin/transactions")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
+        <IconRecords width={20} height={20} className="shrink-0 text-primary" />
+        <span className="flex-1">All transactions</span>
+        <IconChevronRight className="text-muted" />
+      </button>
     </PageFrame>
   );
 }
@@ -506,9 +534,13 @@ function AdminSettingsPage() {
 function DepositPage() {
   const { profile, toast, navigate } = useApp();
   const [amount, setAmount] = useState("");
-  const [phone, setPhone] = useState(profile?.phone ?? "");
+  const [phoneOverride, setPhoneOverride] = useState<string | null>(null);
+  const [provider, setProvider] = useState<PaymentProvider | "">("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const phone = phoneOverride ?? profile?.phone ?? "";
+  const normalizedPhone = normalizeUgandaPhone(phone);
+  const detectedProvider = normalizedPhone ? detectUgandaMobileProvider(normalizedPhone) : null;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -521,10 +553,19 @@ function DepositPage() {
       setError("Enter the phone number that should receive the payment prompt.");
       return;
     }
+    if (!normalizedPhone) {
+      setError("Enter a valid Uganda mobile number.");
+      return;
+    }
+    const selectedProvider = detectedProvider ?? provider;
+    if (!selectedProvider) {
+      setError("Select the mobile money network for this number.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await requestDeposit(value, phone);
+      await requestDeposit(value, phone, selectedProvider);
       setAmount("");
       toast(`Payment prompt sent to ${phone}. Approve it on that phone to complete your deposit.`);
       navigate("/records");
@@ -540,7 +581,10 @@ function DepositPage() {
       <Panel title="Add funds">
         <form onSubmit={submit} className="space-y-4">
           <Field label="Amount (UGX)" type="number" min="10000" step="1000" inputMode="numeric" required value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="10,000" />
-          <Field label="Phone number" type="tel" inputMode="tel" autoComplete="tel" required value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+256 7XX XXX XXX" />
+          <Field label="Phone number" type="tel" inputMode="tel" autoComplete="tel" required value={phone} onChange={(event) => { setPhoneOverride(event.target.value); setProvider(""); }} placeholder="+256 7XX XXX XXX" />
+          {normalizedPhone && !detectedProvider && (
+            <NetworkSelector value={provider} onChange={setProvider} />
+          )}
           <p className="m-0 text-[12px] text-muted">Minimum deposit: <strong className="text-ink">UGX 10,000</strong>. Approve the prompt on this phone. Your balance updates when payment is confirmed.</p>
           {error && <PageError message={error} />}
           <PageButton type="submit" disabled={busy}>{busy ? "Sending prompt..." : "Send payment prompt"}</PageButton>
@@ -556,19 +600,26 @@ function DepositPage() {
 function WithdrawPage() {
   const { profile, refreshProfile, toast } = useApp();
   const [amount, setAmount] = useState("");
-  const [phone, setPhone] = useState(profile?.phone ?? "");
+  const [phoneOverride, setPhoneOverride] = useState<string | null>(null);
+  const [provider, setProvider] = useState<PaymentProvider | "">("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const phone = phoneOverride ?? profile?.phone ?? "";
+  const normalizedPhone = normalizeUgandaPhone(phone);
+  const detectedProvider = normalizedPhone ? detectUgandaMobileProvider(normalizedPhone) : null;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = Number(amount);
     if (!Number.isFinite(value) || value < 5000) { setError("The minimum withdrawal is UGX 5,000."); return; }
     if (!phone.trim()) { setError("Enter the phone number where you want to receive your withdrawal."); return; }
+    if (!normalizedPhone) { setError("Enter a valid Uganda mobile number."); return; }
+    const selectedProvider = detectedProvider ?? provider;
+    if (!selectedProvider) { setError("Select the mobile money network for this number."); return; }
     setBusy(true);
     setError(null);
     try {
-      await requestWithdrawal(value, phone);
+      await requestWithdrawal(value, phone, selectedProvider);
       await refreshProfile();
       setAmount("");
       toast("Withdrawal request submitted. It is pending admin approval.");
@@ -591,7 +642,10 @@ function WithdrawPage() {
       </Panel>
       <Panel title="Withdrawal amount">
         <form onSubmit={submit} className="space-y-4">
-          <Field label="Phone number to receive payment" type="tel" inputMode="tel" autoComplete="tel" required value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+256 7XX XXX XXX" />
+          <Field label="Phone number to receive payment" type="tel" inputMode="tel" autoComplete="tel" required value={phone} onChange={(event) => { setPhoneOverride(event.target.value); setProvider(""); }} placeholder="+256 7XX XXX XXX" />
+          {normalizedPhone && !detectedProvider && (
+            <NetworkSelector value={provider} onChange={setProvider} />
+          )}
           <Field label="Amount (UGX)" type="number" min="5000" step="1000" inputMode="numeric" required value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="5,000" />
           <div className="space-y-2 rounded-lg bg-page p-3 text-[12px]">
             <p className="m-0 flex justify-between text-muted"><span>Withdrawal fee (20%)</span><span>UGX {formatMoney(fee)}</span></p>
@@ -604,6 +658,33 @@ function WithdrawPage() {
         </form>
       </Panel>
     </PageFrame>
+  );
+}
+
+function NetworkSelector({
+  value,
+  onChange,
+}: {
+  value: PaymentProvider | "";
+  onChange: (provider: PaymentProvider | "") => void;
+}) {
+  return (
+    <label className="block text-[12px] font-semibold text-ink-soft">
+      Mobile money network
+      <select
+        required
+        value={value}
+        onChange={(event) => {
+          const selected = event.target.value;
+          if (selected === "mtn" || selected === "airtel" || selected === "") onChange(selected);
+        }}
+        className="mt-1.5 h-11 w-full rounded-lg border border-line-blue bg-white px-3 text-[14px] text-ink outline-none focus:border-primary"
+      >
+        <option value="">Select a network</option>
+        <option value="mtn">MTN Mobile Money</option>
+        <option value="airtel">Airtel Money</option>
+      </select>
+    </label>
   );
 }
 

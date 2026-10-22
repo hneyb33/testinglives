@@ -10,6 +10,7 @@ import type {
   Transaction,
 } from "./types";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { normalizeUgandaPhone } from "@/lib/phone";
 
 export const PHONE_EMAIL_DOMAIN = "testinglives.com";
 
@@ -19,7 +20,13 @@ const EMPTY_COMMUNITY_LINKS: CommunityLinks = {
 };
 
 export function phoneToEmail(dial: string, phone: string) {
-  return `${dial.replace("+", "")}${phone}@${PHONE_EMAIL_DOMAIN}`;
+  const normalized = normalizeUgandaPhone(phone) ?? normalizeUgandaPhone(`${dial}${phone}`);
+  const address = normalized?.replace("+", "") ?? `${dial.replace("+", "")}${phone}`;
+  return `${address}@${PHONE_EMAIL_DOMAIN}`;
+}
+
+export function legacyPhoneToEmail(dial: string, phone: string) {
+  return `${dial.replace("+", "")}${phone.replace(/\D/g, "")}@${PHONE_EMAIL_DOMAIN}`;
 }
 
 export async function fetchCommunityLinks(client: SupabaseClient): Promise<CommunityLinks> {
@@ -152,12 +159,12 @@ async function postAuthenticatedPayment<T>(path: string, payload: unknown): Prom
   return result;
 }
 
-export async function requestDeposit(amount: number, phone: string) {
-  return postAuthenticatedPayment<PaymentApiResult>("/api/payments/deposit", { amount, phone });
+export async function requestDeposit(amount: number, phone: string, provider?: "mtn" | "airtel") {
+  return postAuthenticatedPayment<PaymentApiResult>("/api/payments/deposit", { amount, phone, provider });
 }
 
-export async function requestWithdrawal(amount: number, phone: string) {
-  return postAuthenticatedPayment<PaymentApiResult>("/api/payments/withdrawal", { amount, phone });
+export async function requestWithdrawal(amount: number, phone: string, provider?: "mtn" | "airtel") {
+  return postAuthenticatedPayment<PaymentApiResult>("/api/payments/withdrawal", { amount, phone, provider });
 }
 
 export async function fetchPendingWithdrawals(client: SupabaseClient) {

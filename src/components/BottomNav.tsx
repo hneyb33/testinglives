@@ -9,7 +9,7 @@ const ITEMS: { key: TabKey; label: string; path: string; Icon: typeof IconHome }
   { key: "assets", label: "Income", path: "/income", Icon: IconIncome },
   { key: "network", label: "Team", path: "/team", Icon: IconTeam },
   { key: "share", label: "Share", path: "/share", Icon: IconShare },
-  { key: "account", label: "My", path: "/account", Icon: IconUser },
+  { key: "account", label: "Me", path: "/account", Icon: IconUser },
 ];
 
 export function BottomNav() {

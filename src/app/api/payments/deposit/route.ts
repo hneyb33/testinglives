@@ -1,8 +1,10 @@
 import { authenticateRequest, createPesaJetClient, createServiceRoleClient, PaymentConfigError } from "@/lib/server/payments";
+import { normalizeUgandaPhone } from "@/lib/phone";
 
 type DepositRequest = {
   amount?: unknown;
   phone?: unknown;
+  provider?: unknown;
 };
 
 type DepositRecord = {
@@ -32,16 +34,31 @@ export async function POST(request: Request) {
 
   try {
     const pesajet = createPesaJetClient();
-    const phone = pesajet.utils.formatPhoneNumber(phoneInput);
+    const normalizedPhone = normalizeUgandaPhone(phoneInput);
+    if (!normalizedPhone) {
+      return Response.json({ error: "Enter a valid Uganda mobile number." }, { status: 400 });
+    }
+    const phone = pesajet.utils.formatPhoneNumber(normalizedPhone);
     if (!/^\+256\d{9}$/.test(phone)) {
       return Response.json({ error: "Enter a valid Uganda mobile number." }, { status: 400 });
     }
     const detectedProvider = pesajet.utils.detectProvider(phone);
+    const requestedProvider = body.provider === "mtn" || body.provider === "airtel" ? body.provider : null;
+    if (body.provider != null && requestedProvider == null) {
+      return Response.json({ error: "Select a valid mobile money network." }, { status: 400 });
+    }
+    if (detectedProvider && requestedProvider && detectedProvider !== requestedProvider) {
+      return Response.json({ error: "The selected network does not match this phone number." }, { status: 400 });
+    }
+    const provider = detectedProvider ?? requestedProvider;
+    if (!provider) {
+      return Response.json({ error: "Select your mobile money network for this number." }, { status: 400 });
+    }
     const serviceClient = createServiceRoleClient();
     const { data, error } = await session.client.rpc("request_mobile_deposit", {
       p_amount: amount,
       p_phone_number: phone,
-      p_provider: detectedProvider,
+      p_provider: provider,
     });
     if (error) return Response.json({ error: error.message }, { status: 400 });
 
@@ -51,7 +68,7 @@ export async function POST(request: Request) {
       amount: deposit.amount,
       currency: "UGX",
       phoneNumber: pesajet.utils.formatPhoneNumber(deposit.phone_number),
-      ...(deposit.provider ? { provider: deposit.provider } : {}),
+      provider: deposit.provider ?? provider,
       reference: deposit.reference,
       description: "Testing Lives deposit",
       idempotencyKey: deposit.reference,
