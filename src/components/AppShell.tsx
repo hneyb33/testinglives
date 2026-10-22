@@ -17,13 +17,13 @@ export function AppShell() {
 
 function AppFrame() {
   const { route, user, ready, navigate, activeToast } = useApp();
-  const isAuthRoute = route.path.includes("/login/") || route.path.includes("/register/") || route.path.includes("/reset/");
-  const isPublicAboutRoute = route.path === "/pages/about/index";
+  const isAuthRoute = route.path === "/" || route.path === "/login" || route.path === "/register" || route.path === "/reset-password";
+  const isPublicAboutRoute = route.path === "/about";
 
   useEffect(() => {
     if (!ready) return;
-    if (!user && !isAuthRoute && !isPublicAboutRoute) navigate("/pages/login/index");
-    if (user && isAuthRoute) navigate("/pages/home/index");
+    if (!user && !isAuthRoute && !isPublicAboutRoute) navigate("/");
+    if (user && isAuthRoute) navigate("/home");
   }, [ready, user, isAuthRoute, isPublicAboutRoute, navigate]);
 
   let content;
@@ -37,7 +37,7 @@ function AppFrame() {
     content = isPublicAboutRoute
       ? <MemberPages path={route.path} />
       : <AuthScreen key={`${route.path}:${route.params.toString()}`} />;
-  } else if (route.path === "/pages/home/index" || isAuthRoute) {
+  } else if (route.path === "/home" || isAuthRoute) {
     content = <HomePage />;
   } else {
     content = <MemberPages path={route.path} />;

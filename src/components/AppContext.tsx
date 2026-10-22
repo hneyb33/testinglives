@@ -11,13 +11,29 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient, getSupabaseConfigurationError } from "@/lib/supabase";
 import { fetchProfile } from "@/lib/app-data";
 import type { Profile, Route } from "@/lib/types";
 
-const TAB_ROUTES = ["/pages/home/index", "/pages/assets/index", "/pages/network/index", "/pages/share/index", "/pages/account/index"];
+const TAB_ROUTES = ["/home", "/income", "/team", "/share", "/account"];
 const LANGUAGE_EVENT = "app-language-change";
+const LEGACY_ROUTES: Record<string, string> = {
+  "/pages/login/index": "/",
+  "/pages/register/index": "/register",
+  "/pages/home/index": "/home",
+  "/pages/assets/index": "/income",
+  "/pages/network/index": "/team",
+  "/pages/share/index": "/share",
+  "/pages/account/index": "/account",
+  "/pages/deposit/index": "/deposit",
+  "/pages/withdraw/index": "/withdraw",
+  "/pages/records/index": "/records",
+  "/pages/admin/index": "/admin/withdrawals",
+  "/pages/about/index": "/about",
+  "/pages/announce/index": "/about",
+};
 
 function subscribeLanguage(onStoreChange: () => void) {
   window.addEventListener("storage", onStoreChange);
@@ -30,12 +46,6 @@ function subscribeLanguage(onStoreChange: () => void) {
 
 function getLanguageSnapshot() {
   return window.localStorage.getItem("app-language") ?? "English";
-}
-
-function parseHash(): Route {
-  const raw = window.location.hash.replace(/^#/, "") || "/pages/home/index";
-  const [path = "/pages/home/index", query = ""] = raw.split("?");
-  return { path, params: new URLSearchParams(query) };
 }
 
 type Toast = { id: number; text: string; kind: "info" | "error" } | null;
@@ -67,7 +77,13 @@ export function useApp() {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [route, setRoute] = useState<Route>({ path: "/pages/login/index", params: new URLSearchParams() });
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const route = useMemo<Route>(() => ({
+    path: pathname || "/",
+    params: new URLSearchParams(searchParams.toString()),
+  }), [pathname, searchParams]);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [ready, setReady] = useState(false);
@@ -75,17 +91,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [balanceVisible, setBalanceVisible] = useState(true);
   const language = useSyncExternalStore(subscribeLanguage, getLanguageSnapshot, () => "English");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const legacyHashHandled = useRef(false);
   const configError = getSupabaseConfigurationError();
 
   const navigate = useCallback((path: string, params?: Record<string, string>) => {
     const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
-    window.location.hash = `${path}${qs}`;
-  }, []);
+    router.push(`${path}${qs}`);
+  }, [router]);
 
   const goBack = useCallback(() => {
-    if (window.history.length > 1) window.history.back();
-    else navigate("/pages/home/index");
-  }, [navigate]);
+    if (window.history.length > 1) router.back();
+    else navigate("/home");
+  }, [navigate, router]);
 
   const toast = useCallback((text: string, kind: "info" | "error" = "info") => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -110,11 +127,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [configError]);
 
   useEffect(() => {
-    const onHash = () => setRoute(parseHash());
-    onHash();
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, []);
+    if (legacyHashHandled.current) return;
+    legacyHashHandled.current = true;
+    const legacy = window.location.hash.replace(/^#/, "");
+    if (!legacy) return;
+
+    const separator = legacy.indexOf("?");
+    const oldPath = separator < 0 ? legacy : legacy.slice(0, separator);
+    const query = separator < 0 ? "" : legacy.slice(separator + 1);
+    const nextPath = LEGACY_ROUTES[oldPath];
+    if (nextPath) router.replace(`${nextPath}${query ? `?${query}` : ""}`);
+  }, [router]);
 
   useEffect(() => {
     if (configError) return;

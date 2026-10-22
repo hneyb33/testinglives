@@ -34,24 +34,24 @@ import {
 
 export function MemberPages({ path }: { path: string }) {
   switch (path) {
-    case "/pages/assets/index":
+    case "/income":
       return <IncomePage />;
-    case "/pages/network/index":
+    case "/team":
       return <TeamPage />;
-    case "/pages/share/index":
+    case "/share":
       return <SharePage />;
-    case "/pages/account/index":
+    case "/account":
       return <AccountPage />;
-    case "/pages/deposit/index":
+    case "/deposit":
       return <DepositPage />;
-    case "/pages/withdraw/index":
+    case "/withdraw":
       return <WithdrawPage />;
-    case "/pages/admin/index":
+    case "/admin/withdrawals":
       return <AdminWithdrawalsPage />;
-    case "/pages/records/index":
+    case "/records":
       return <RecordsPage />;
-    case "/pages/announce/index":
-    case "/pages/about/index":
+    case "/announce":
+    case "/about":
       return <AboutPage />;
     default:
       return <PageFrame title="Page"><EmptyMessage>That page is not available.</EmptyMessage></PageFrame>;
@@ -63,7 +63,7 @@ function PageFrame({ title, children }: { title: string; children: ReactNode }) 
   return (
     <main className="min-h-screen bg-page pb-24">
       <header className="flex items-center gap-3 border-b border-line-blue/60 bg-white px-4 pb-4 pt-5">
-        <button type="button" onClick={() => navigate("/pages/home/index")} className="grid h-9 w-9 place-items-center rounded-full bg-page text-ink" aria-label="Back to home">
+        <button type="button" onClick={() => navigate("/home")} className="grid h-9 w-9 place-items-center rounded-full bg-page text-ink" aria-label="Back to home">
           <IconBack />
         </button>
         <div>
@@ -121,7 +121,7 @@ function Field({ label, ...inputProps }: React.InputHTMLAttributes<HTMLInputElem
 }
 
 function referralUrl(code: string) {
-  return `${window.location.origin}/#/pages/register/index?inviteCode=${encodeURIComponent(code)}`;
+  return `${window.location.origin}/register?inviteCode=${encodeURIComponent(code)}`;
 }
 
 function ReferralCodePanel() {
@@ -366,13 +366,13 @@ function AccountPage() {
       </Panel>
       <ReferralCodePanel />
       {user?.app_metadata?.role === "admin" && (
-        <button type="button" onClick={() => navigate("/pages/admin/index")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
+        <button type="button" onClick={() => navigate("/admin/withdrawals")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
           <IconClock width={20} height={20} className="shrink-0 text-primary" />
           <span className="flex-1">Payout review</span>
           <IconChevronRight className="text-muted" />
         </button>
       )}
-      <button type="button" onClick={() => navigate("/pages/about/index")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
+      <button type="button" onClick={() => navigate("/about")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
         <IconInfo width={20} height={20} className="shrink-0 text-primary" />
         <span className="flex-1">About Testing Lives</span>
         <IconChevronRight className="text-muted" />

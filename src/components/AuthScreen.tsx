@@ -23,7 +23,7 @@ export function AuthScreen() {
   const { route, navigate, toast, configError } = useApp();
   const inviteFromUrl = route.params.get("inviteCode") ?? route.params.get("invite");
   const initialTab: AuthTab = route.path.includes("reset") || route.path.includes("register") || inviteFromUrl ? "register" : "login";
-  const [tab, setTab] = useState<AuthTab>(initialTab);
+  const tab = initialTab;
   const [langOpen, setLangOpen] = useState(false);
 
   const [phone, setPhone] = useState("");
@@ -53,9 +53,8 @@ export function AuthScreen() {
   }, [tab, configError]);
 
   function switchTab(next: AuthTab) {
-    setTab(next);
     setError(null);
-    setRequiresInvite(next === "register" ? null : false);
+    navigate(next === "register" ? "/register" : "/");
   }
 
   const visibleError = error ?? configError;
@@ -84,7 +83,7 @@ export function AuthScreen() {
           void client.auth.signOut();
         });
       }
-      navigate("/pages/home/index");
+      navigate("/home");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed. Try again.");
     } finally {
@@ -140,12 +139,15 @@ export function AuthScreen() {
         const message = authError.message.toLowerCase();
         if (message.includes("already")) throw new Error("This number is already registered.");
         if (message.includes("invitation code")) throw new Error(authError.message);
-        throw new Error("Registration failed. Try again.");
+        if (message.includes("database error") || message.includes("saving new user")) {
+          throw new Error("Account setup failed while saving your profile. Confirm the Supabase migrations and auth profile trigger are installed, then check Supabase Auth logs.");
+        }
+        throw new Error(authError.message || `Registration failed (HTTP ${authError.status ?? 400}).`);
       }
       if (!data.user?.id) throw new Error("Registration failed. Try again.");
 
       toast("Account created. Sign in to continue.");
-      navigate("/pages/login/index");
+      navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed. Try again.");
     } finally {
@@ -345,7 +347,7 @@ export function AuthScreen() {
               <p className="m-0 text-[11px] leading-relaxed text-ink-soft">Respectful HIV awareness. Testing is voluntary, and medical information is private.</p>
               <button
                 type="button"
-                onClick={() => navigate("/pages/about/index")}
+                onClick={() => navigate("/about")}
                 className="mt-2 inline-flex items-center gap-1.5 bg-transparent text-[12px] font-bold text-primary"
               >
                 <IconInfo width={15} height={15} /> About Testing Lives

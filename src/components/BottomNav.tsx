@@ -5,11 +5,11 @@ import { IconHome, IconIncome, IconShare, IconTeam, IconUser } from "./Icons";
 import type { TabKey } from "@/lib/types";
 
 const ITEMS: { key: TabKey; label: string; path: string; Icon: typeof IconHome }[] = [
-  { key: "home", label: "Home", path: "/pages/home/index", Icon: IconHome },
-  { key: "assets", label: "Income", path: "/pages/assets/index", Icon: IconIncome },
-  { key: "network", label: "Team", path: "/pages/network/index", Icon: IconTeam },
-  { key: "share", label: "Share", path: "/pages/share/index", Icon: IconShare },
-  { key: "account", label: "My", path: "/pages/account/index", Icon: IconUser },
+  { key: "home", label: "Home", path: "/home", Icon: IconHome },
+  { key: "assets", label: "Income", path: "/income", Icon: IconIncome },
+  { key: "network", label: "Team", path: "/team", Icon: IconTeam },
+  { key: "share", label: "Share", path: "/share", Icon: IconShare },
+  { key: "account", label: "My", path: "/account", Icon: IconUser },
 ];
 
 export function BottomNav() {

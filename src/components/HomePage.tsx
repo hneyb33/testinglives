@@ -64,7 +64,7 @@ export function HomePage() {
         </div>
         <button
           type="button"
-          onClick={() => navigate("/pages/about/index")}
+          onClick={() => navigate("/about")}
           className="absolute right-[16px] top-[18px] rounded-full bg-white/20 p-2 text-white backdrop-blur-sm"
           aria-label="About Testing Lives"
         >
@@ -88,7 +88,7 @@ export function HomePage() {
         </div>
         <button
           type="button"
-          onClick={() => navigate("/pages/records/index")}
+          onClick={() => navigate("/records")}
           className="rounded-full bg-white/20 px-3.5 py-1.5 text-[12px] font-semibold text-white backdrop-blur-sm"
         >
           Records
@@ -99,17 +99,17 @@ export function HomePage() {
         <QuickAction
           icon={<IconDeposit className="text-primary" width={26} height={26} />}
           label="Deposit"
-          onClick={() => navigate("/pages/deposit/index")}
+          onClick={() => navigate("/deposit")}
         />
         <QuickAction
           icon={<IconWithdraw className="text-primary" width={26} height={26} />}
           label="Withdraw"
-          onClick={() => navigate("/pages/withdraw/index")}
+          onClick={() => navigate("/withdraw")}
         />
         <QuickAction
           icon={<IconRecords className="text-primary" width={26} height={26} />}
           label="Records"
-          onClick={() => navigate("/pages/records/index")}
+          onClick={() => navigate("/records")}
         />
       </section>
 
