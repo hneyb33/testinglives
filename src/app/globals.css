@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #095ae7;
+  --color-primary-deep: #0750c9;
+  --color-primary-mid: #2f72ea;
+  --color-primary-light: #5a91ec;
+  --color-sky-soft: #accfe5;
+  --color-page: #eef3fc;
+  --color-card-blue: #f0f7fd;
+  --color-ink: #14161c;
+  --color-ink-soft: #4a5568;
+  --color-muted: #8a94a8;
+  --color-line-blue: #c9d3f5;
+  --color-gold: #ffc61a;
+  --color-success: #1a9e4b;
+  --color-danger: #e5484d;
+  --color-wait: #ff9f0a;
+  --font-sans: var(--font-roboto), -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #dfe7f5;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.phone-shell {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  min-height: 100vh;
+  margin: 0 auto;
+  background: var(--color-page);
+  overflow-x: hidden;
+  box-shadow: 0 0 60px rgba(20, 40, 90, 0.18);
+}
+
+@media (min-width: 520px) {
+  .phone-shell {
+    min-height: 92vh;
+    margin: 4vh auto;
+    border-radius: 28px;
+    overflow: hidden;
+  }
+}
+
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(16, 32, 66, 0.42);
+  backdrop-filter: blur(4px);
+}
+
+.sheet-panel {
+  width: 100%;
+  max-width: 480px;
+  max-height: 86vh;
+  overflow-y: auto;
+  border-radius: 26px 26px 0 0;
+  background: #fff;
+  padding-bottom: max(18px, env(safe-area-inset-bottom));
+  animation: sheet-up 0.24s ease-out;
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(48px);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.toast-pop {
+  animation: toast-in 0.22s ease-out;
+}
+
+@keyframes toast-in {
+  from {
+    transform: translate(-50%, -12px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
