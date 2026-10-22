@@ -9,8 +9,10 @@ import {
   fetchCommunityLinks,
   fetchInvestments,
   fetchProducts,
+  fetchPublicAppSettings,
   formatMoney,
 } from "@/lib/app-data";
+import type { AdminSettings } from "@/lib/admin-types";
 import type { CommunityLinks, Investment, Product } from "@/lib/types";
 import { useApp } from "./AppContext";
 import {
@@ -32,6 +34,17 @@ const EMPTY_LINKS: CommunityLinks = {
   telegramGroupUrl: "",
 };
 
+const DEFAULT_SETTINGS: AdminSettings = {
+  minimum_deposit: 10000,
+  minimum_withdrawal: 5000,
+  withdrawal_start: "09:00",
+  withdrawal_end: "21:00",
+  withdrawal_fee_percent: 20,
+  referral_reward_percent: 15,
+  referral_rule: "",
+  welcome_message: "Official support will never ask for your password or screenshots of your deposits. Keep your account details private.",
+};
+
 type HomeTab = "earnings" | "plans";
 
 export function HomePage() {
@@ -39,6 +52,7 @@ export function HomePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [communityLinks, setCommunityLinks] = useState(EMPTY_LINKS);
+  const [appSettings, setAppSettings] = useState(DEFAULT_SETTINGS);
   const [purchaseCounts, setPurchaseCounts] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<Product | null>(null);
   const [activeSlide, setActiveSlide] = useState(0);
@@ -82,6 +96,12 @@ export function HomePage() {
       .then((links) => { if (active) setCommunityLinks(links); })
       .catch(() => {
         if (active) toast("Community contact links could not be loaded.", "error");
+      });
+
+    void fetchPublicAppSettings(client)
+      .then((settings) => { if (active) setAppSettings(settings); })
+      .catch(() => {
+        if (active) toast("Welcome and payment settings could not be loaded.", "error");
       });
 
     return () => { active = false; };
@@ -222,6 +242,8 @@ export function HomePage() {
           userId={profile.id}
           groupUrl={communityLinks.telegramGroupUrl}
           serviceUrl={communityLinks.serviceChatUrl}
+          settings={appSettings}
+          welcomeMessage={appSettings.welcome_message}
           onStorageError={() => toast("The welcome notice may appear again next time.", "error")}
         />
       )}
@@ -233,11 +255,15 @@ function WelcomeDialog({
   userId,
   groupUrl,
   serviceUrl,
+  settings,
+  welcomeMessage,
   onStorageError,
 }: {
   userId: string;
   groupUrl: string;
   serviceUrl: string;
+  settings: AdminSettings;
+  welcomeMessage: string;
   onStorageError: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -246,17 +272,20 @@ function WelcomeDialog({
     const dialog = dialogRef.current;
     if (!dialog) return;
     try {
-      if (window.localStorage.getItem(`testinglives-welcome-dismissed:${userId}`) === "true") return;
+      if (window.localStorage.getItem(`testinglives-welcome-dismissed:${userId}`) === welcomeMessage) {
+        if (dialog.open) dialog.close();
+        return;
+      }
     } catch {
-      dialog.showModal();
+      if (!dialog.open) dialog.showModal();
       return;
     }
-    dialog.showModal();
-  }, [userId]);
+    if (!dialog.open) dialog.showModal();
+  }, [userId, welcomeMessage]);
 
   function dismiss() {
     try {
-      window.localStorage.setItem(`testinglives-welcome-dismissed:${userId}`, "true");
+      window.localStorage.setItem(`testinglives-welcome-dismissed:${userId}`, welcomeMessage);
     } catch {
       onStorageError();
     }
@@ -275,12 +304,12 @@ function WelcomeDialog({
             Close
           </button>
         </div>
-        <p className="m-0 mb-4 text-[13px] leading-relaxed text-ink-soft">A quick guide to your account and the current withdrawal terms.</p>
+        <p className="m-0 mb-4 text-[13px] leading-relaxed text-ink-soft">{settings.welcome_message}</p>
         <dl className="divide-y divide-line-blue rounded-xl border border-line-blue text-[13px] text-ink-soft">
           <WelcomeRow label="Plan earnings" value="Follow the terms shown for each active plan." />
-          <WelcomeRow label="Withdrawal hours" value="09:00–21:00 Kampala time" />
-          <WelcomeRow label="Minimum withdrawal" value="UGX 5,000" />
-          <WelcomeRow label="Withdrawal fee" value="20%" />
+          <WelcomeRow label="Withdrawal hours" value={`${settings.withdrawal_start}–${settings.withdrawal_end} Kampala time`} />
+          <WelcomeRow label="Minimum withdrawal" value={`UGX ${formatMoney(settings.minimum_withdrawal)}`} />
+          <WelcomeRow label="Withdrawal fee" value={`${settings.withdrawal_fee_percent}%`} />
           <WelcomeRow label="Payout review" value="An administrator reviews requests before payment." />
         </dl>
         <p className="mb-0 mt-4 text-center text-[13px] leading-relaxed text-ink-soft">Official support will never ask for your password or screenshots of your deposits. Keep your account details private.</p>

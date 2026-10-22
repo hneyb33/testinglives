@@ -2,12 +2,15 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Image from "next/image";
+import { AdminDashboard } from "./AdminDashboard";
+import type { AdminSettings } from "@/lib/admin-types";
 import type { CommunityLinks, Investment, PaymentProvider, PendingWithdrawal, TeamMember, Transaction } from "@/lib/types";
 import {
   approveWithdrawal,
   claimDailyIncome,
   daysElapsed,
   fetchCommunityLinks,
+  fetchPublicAppSettings,
   fetchAdminTransactions,
   fetchInvestments,
   fetchPendingWithdrawals,
@@ -16,6 +19,7 @@ import {
   formatDate,
   formatMoney,
   rejectWithdrawal,
+  logReferralShare,
   requestDeposit,
   requestWithdrawal,
   saveCommunityLinks,
@@ -48,7 +52,7 @@ export function MemberPages({ path }: { path: string }) {
     case "/account":
       return <AccountPage />;
     case "/admin":
-      return <AdminDashboardPage />;
+      return <AdminDashboard />;
     case "/deposit":
       return <DepositPage />;
     case "/withdraw":
@@ -123,6 +127,30 @@ function PageButton({ children, disabled = false, onClick, type = "button" }: {
   );
 }
 
+const DEFAULT_APP_SETTINGS: AdminSettings = {
+  minimum_deposit: 10000,
+  minimum_withdrawal: 5000,
+  withdrawal_start: "09:00",
+  withdrawal_end: "21:00",
+  withdrawal_fee_percent: 20,
+  referral_reward_percent: 15,
+  referral_rule: "Referral rewards are credited after a referred member reports a completed test and it is verified.",
+  welcome_message: "Official support will never ask for your password or screenshots of your deposits. Keep your account details private.",
+};
+
+function usePublicAppSettings() {
+  const { toast } = useApp();
+  const [settings, setSettings] = useState(DEFAULT_APP_SETTINGS);
+  useEffect(() => {
+    let active = true;
+    fetchPublicAppSettings(getSupabaseBrowserClient())
+      .then((nextSettings) => { if (active) setSettings(nextSettings); })
+      .catch(() => { if (active) toast("Application settings could not be loaded.", "error"); });
+    return () => { active = false; };
+  }, [toast]);
+  return settings;
+}
+
 function Field({ label, ...inputProps }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
   return (
     <label className="block text-[12px] font-semibold text-ink-soft">
@@ -139,12 +167,18 @@ function referralUrl(code: string) {
 function ReferralCodePanel() {
   const { profile, toast } = useApp();
   const code = profile?.referral_code ?? "";
+  const settings = usePublicAppSettings();
 
   async function copyLink() {
     if (!code) return;
     try {
       await navigator.clipboard.writeText(referralUrl(code));
-      toast("Invitation link copied.");
+      try {
+        await logReferralShare(getSupabaseBrowserClient());
+        toast("Invitation link copied.");
+      } catch {
+        toast("Invitation copied, but share tracking failed.", "error");
+      }
     } catch {
       toast("Could not copy the link on this device.", "error");
     }
@@ -158,7 +192,7 @@ function ReferralCodePanel() {
           <IconCopy />
         </button>
       </div>
-      <p className="mb-0 mt-3 text-[12px] leading-relaxed text-muted">Separate referral program: a 15% plan-price reward is credited after a referred member reports a completed test and it is verified. The reward never depends on HIV status or results. Testing is voluntary; never request or share someone&apos;s results.</p>
+      <p className="mb-0 mt-3 text-[12px] leading-relaxed text-muted">Referral reward: {settings.referral_reward_percent}% of the plan price. {settings.referral_rule} The reward never depends on HIV status or results. Testing is voluntary; never request or share someone&apos;s results.</p>
       <PageButton onClick={copyLink}><IconCopy width={17} height={17} /> Copy invite link</PageButton>
     </Panel>
   );
@@ -407,37 +441,6 @@ function AccountPage() {
   );
 }
 
-function AdminDashboardPage() {
-  const { user, navigate } = useApp();
-  const isAdmin = user?.app_metadata?.role === "admin";
-  if (!isAdmin) {
-    return <PageFrame title="Admin dashboard"><PageError message="Administrator access is required." /></PageFrame>;
-  }
-
-  return (
-    <PageFrame title="Admin dashboard">
-      <Panel>
-        <p className="m-0 text-[13px] leading-relaxed text-ink-soft">Manage member payouts, community links, and transaction records.</p>
-      </Panel>
-      <button type="button" onClick={() => navigate("/admin/withdrawals")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
-        <IconClock width={20} height={20} className="shrink-0 text-primary" />
-        <span className="flex-1">Payout review</span>
-        <IconChevronRight className="text-muted" />
-      </button>
-      <button type="button" onClick={() => navigate("/admin/settings")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
-        <IconInfo width={20} height={20} className="shrink-0 text-primary" />
-        <span className="flex-1">Community settings</span>
-        <IconChevronRight className="text-muted" />
-      </button>
-      <button type="button" onClick={() => navigate("/admin/transactions")} className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-line-blue/60 bg-white px-4 text-left text-[14px] font-medium text-ink shadow-[0_2px_10px_rgba(30,50,120,0.05)]">
-        <IconRecords width={20} height={20} className="shrink-0 text-primary" />
-        <span className="flex-1">All transactions</span>
-        <IconChevronRight className="text-muted" />
-      </button>
-    </PageFrame>
-  );
-}
-
 function validateTelegramUrl(value: string, label: string) {
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -533,6 +536,7 @@ function AdminSettingsPage() {
 
 function DepositPage() {
   const { profile, toast, navigate } = useApp();
+  const settings = usePublicAppSettings();
   const [amount, setAmount] = useState("");
   const [phoneOverride, setPhoneOverride] = useState<string | null>(null);
   const [provider, setProvider] = useState<PaymentProvider | "">("");
@@ -545,8 +549,8 @@ function DepositPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = Number(amount);
-    if (!Number.isFinite(value) || value < 10000) {
-      setError("The minimum deposit is UGX 10,000.");
+    if (!Number.isFinite(value) || value < settings.minimum_deposit) {
+      setError(`The minimum deposit is UGX ${formatMoney(settings.minimum_deposit)}.`);
       return;
     }
     if (!phone.trim()) {
@@ -580,12 +584,12 @@ function DepositPage() {
     <PageFrame title="Deposit">
       <Panel title="Add funds">
         <form onSubmit={submit} className="space-y-4">
-          <Field label="Amount (UGX)" type="number" min="10000" step="1000" inputMode="numeric" required value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="10,000" />
+          <Field label="Amount (UGX)" type="number" min={settings.minimum_deposit} step="1000" inputMode="numeric" required value={amount} onChange={(event) => setAmount(event.target.value)} placeholder={formatMoney(settings.minimum_deposit)} />
           <Field label="Phone number" type="tel" inputMode="tel" autoComplete="tel" required value={phone} onChange={(event) => { setPhoneOverride(event.target.value); setProvider(""); }} placeholder="+256 7XX XXX XXX" />
           {normalizedPhone && !detectedProvider && (
             <NetworkSelector value={provider} onChange={setProvider} />
           )}
-          <p className="m-0 text-[12px] text-muted">Minimum deposit: <strong className="text-ink">UGX 10,000</strong>. Approve the prompt on this phone. Your balance updates when payment is confirmed.</p>
+          <p className="m-0 text-[12px] text-muted">Minimum deposit: <strong className="text-ink">UGX {formatMoney(settings.minimum_deposit)}</strong>. Approve the prompt on this phone. Your balance updates when payment is confirmed.</p>
           {error && <PageError message={error} />}
           <PageButton type="submit" disabled={busy}>{busy ? "Sending prompt..." : "Send payment prompt"}</PageButton>
         </form>
@@ -599,6 +603,7 @@ function DepositPage() {
 
 function WithdrawPage() {
   const { profile, refreshProfile, toast } = useApp();
+  const settings = usePublicAppSettings();
   const [amount, setAmount] = useState("");
   const [phoneOverride, setPhoneOverride] = useState<string | null>(null);
   const [provider, setProvider] = useState<PaymentProvider | "">("");
@@ -611,7 +616,7 @@ function WithdrawPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = Number(amount);
-    if (!Number.isFinite(value) || value < 5000) { setError("The minimum withdrawal is UGX 5,000."); return; }
+    if (!Number.isFinite(value) || value < settings.minimum_withdrawal) { setError(`The minimum withdrawal is UGX ${formatMoney(settings.minimum_withdrawal)}.`); return; }
     if (!phone.trim()) { setError("Enter the phone number where you want to receive your withdrawal."); return; }
     if (!normalizedPhone) { setError("Enter a valid Uganda mobile number."); return; }
     const selectedProvider = detectedProvider ?? provider;
@@ -631,7 +636,7 @@ function WithdrawPage() {
   }
 
   const gross = Number(amount) || 0;
-  const fee = gross * 0.2;
+  const fee = gross * settings.withdrawal_fee_percent / 100;
   const payout = gross - fee;
 
   return (
@@ -646,12 +651,12 @@ function WithdrawPage() {
           {normalizedPhone && !detectedProvider && (
             <NetworkSelector value={provider} onChange={setProvider} />
           )}
-          <Field label="Amount (UGX)" type="number" min="5000" step="1000" inputMode="numeric" required value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="5,000" />
+          <Field label="Amount (UGX)" type="number" min={settings.minimum_withdrawal} step="1000" inputMode="numeric" required value={amount} onChange={(event) => setAmount(event.target.value)} placeholder={formatMoney(settings.minimum_withdrawal)} />
           <div className="space-y-2 rounded-lg bg-page p-3 text-[12px]">
-            <p className="m-0 flex justify-between text-muted"><span>Withdrawal fee (20%)</span><span>UGX {formatMoney(fee)}</span></p>
+            <p className="m-0 flex justify-between text-muted"><span>Withdrawal fee ({settings.withdrawal_fee_percent}%)</span><span>UGX {formatMoney(fee)}</span></p>
             <p className="m-0 flex justify-between font-semibold text-ink"><span>You receive</span><span>UGX {formatMoney(payout)}</span></p>
           </div>
-          <p className="m-0 flex items-center gap-2 text-[11px] text-muted"><IconClock width={16} height={16} /> Requests are accepted 9:00 AM–9:00 PM Kampala time. Minimum UGX 5,000.</p>
+          <p className="m-0 flex items-center gap-2 text-[11px] text-muted"><IconClock width={16} height={16} /> Requests are accepted {settings.withdrawal_start}–{settings.withdrawal_end} Kampala time. Minimum UGX {formatMoney(settings.minimum_withdrawal)}.</p>
           <p className="m-0 text-[12px] leading-relaxed text-muted">Your wallet amount is reserved while an admin reviews your request. After approval, payment is sent to the number above. If payment fails, the reserved amount is refunded.</p>
           {error && <PageError message={error} />}
           <PageButton type="submit" disabled={busy}>{busy ? "Submitting..." : "Request withdrawal"}</PageButton>
@@ -820,7 +825,7 @@ function RecordsPage() {
             {items.map((item) => (
               <article key={item.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                 <div className="min-w-0">
-                  <p className="m-0 truncate text-[13px] font-semibold capitalize text-ink">{item.note ?? item.kind}</p>
+                  <p className="m-0 truncate text-[13px] font-semibold capitalize text-ink">{item.note ?? (item.kind === "adjustment" ? (item.amount < 0 ? "Admin debit" : "Admin credit") : item.kind)}</p>
                   <p className="m-0 mt-1 text-[10px] text-muted">{formatDate(item.created_at)} · {transactionStatusLabel(item.status)}</p>
                   <p className="m-0 mt-1 text-[10px] text-muted">Phone: {item.payment_phone ?? profile?.phone ?? "—"} · {item.kind}</p>
                   {item.failure_reason && <p className="m-0 mt-1 text-[10px] text-danger">Failure: {item.failure_reason}</p>}
@@ -828,8 +833,8 @@ function RecordsPage() {
                     <p className="m-0 mt-1 text-[10px] text-muted">Fee UGX {formatMoney(item.fee ?? 0)} · Net UGX {formatMoney(item.net_amount)}</p>
                   )}
                 </div>
-                <span className={`shrink-0 text-[13px] font-bold ${item.kind === "withdraw" || item.kind === "invest" ? "text-ink" : "text-success"}`}>
-                  {item.kind === "withdraw" || item.kind === "invest" ? "−" : item.status === "approved" ? "+" : ""}UGX {formatMoney(item.amount)}
+                <span className={`shrink-0 text-[13px] font-bold ${item.kind === "withdraw" || item.kind === "invest" || (item.kind === "adjustment" && item.amount < 0) ? "text-ink" : "text-success"}`}>
+                  {item.kind === "withdraw" || item.kind === "invest" || (item.kind === "adjustment" && item.amount < 0) ? "−" : item.status === "approved" ? "+" : ""}UGX {formatMoney(Math.abs(item.amount))}
                 </span>
               </article>
             ))}

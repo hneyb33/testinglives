@@ -39,7 +39,7 @@ export type Investment = {
   product?: Product;
 };
 
-export type TransactionKind = "deposit" | "withdraw" | "invest" | "income" | "rebate";
+export type TransactionKind = "deposit" | "withdraw" | "invest" | "income" | "rebate" | "adjustment";
 export type PaymentProvider = "mtn" | "airtel";
 
 export type Transaction = {

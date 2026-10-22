@@ -1,4 +1,5 @@
 import { authenticateRequest, createPesaJetClient, createServiceRoleClient, PaymentConfigError } from "@/lib/server/payments";
+import { PesaJetError } from "@pesajet/sdk";
 import { normalizeUgandaPhone } from "@/lib/phone";
 
 type DepositRequest = {
@@ -28,8 +29,8 @@ export async function POST(request: Request) {
 
   const amount = Number(body.amount);
   const phoneInput = typeof body.phone === "string" ? body.phone.trim() : "";
-  if (!Number.isInteger(amount) || amount < 10000) {
-    return Response.json({ error: "The minimum deposit is UGX 10,000." }, { status: 400 });
+  if (!Number.isInteger(amount) || amount <= 0) {
+    return Response.json({ error: "Enter a positive whole-number deposit amount." }, { status: 400 });
   }
 
   try {
@@ -74,12 +75,40 @@ export async function POST(request: Request) {
       idempotencyKey: deposit.reference,
     });
 
+    const responseMismatches: string[] = [];
+    if (typeof payment.type !== "string" || payment.type.toUpperCase() !== "COLLECTION") {
+      responseMismatches.push("type");
+    }
+    if (!Number.isFinite(Number(payment.amount)) || Number(payment.amount) !== deposit.amount) {
+      responseMismatches.push("amount");
+    }
+    if (typeof payment.currency !== "string" || payment.currency.toUpperCase() !== "UGX") {
+      responseMismatches.push("currency");
+    }
+    if (payment.reference !== deposit.reference) responseMismatches.push("reference");
+    if (payment.provider && payment.provider.toLowerCase() !== deposit.provider) {
+      responseMismatches.push("provider");
+    }
     if (
-      payment.type !== "COLLECTION" || payment.amount !== deposit.amount ||
-      payment.currency !== "UGX" || payment.reference !== deposit.reference ||
-      (deposit.provider && payment.provider !== deposit.provider)
+      !payment.transactionId ||
+      !["PENDING", "PROCESSING", "COMPLETED", "FAILED", "EXPIRED"].includes(payment.status)
     ) {
-      console.error("Deposit response did not match the initiated request.");
+      responseMismatches.push("transaction metadata");
+    }
+
+    if (responseMismatches.length > 0) {
+      console.error("Deposit response did not match the initiated request.", {
+        mismatches: responseMismatches,
+        response: {
+          type: payment.type,
+          amount: payment.amount,
+          currency: payment.currency,
+          referenceMatches: payment.reference === deposit.reference,
+          provider: payment.provider ?? null,
+          status: payment.status,
+          hasTransactionId: Boolean(payment.transactionId),
+        },
+      });
       return Response.json({ error: "The payment provider returned an unexpected response. Check Records before retrying." }, { status: 502 });
     }
 
@@ -101,7 +130,15 @@ export async function POST(request: Request) {
     if (error instanceof PaymentConfigError) {
       return Response.json({ error: "Payment service is not configured." }, { status: 503 });
     }
-    console.error("Deposit initiation failed.", error instanceof Error ? error.message : "Unknown error");
+    if (error instanceof PesaJetError) {
+      console.error("Deposit initiation failed.", {
+        message: error.message,
+        statusCode: error.statusCode,
+        errorCode: error.errorCode,
+      });
+    } else {
+      console.error("Deposit initiation failed.", error instanceof Error ? error.message : "Unknown error");
+    }
     return Response.json({ error: "The payment prompt could not be confirmed. Check your records before retrying." }, { status: 502 });
   }
 }

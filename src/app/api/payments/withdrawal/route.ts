@@ -14,8 +14,8 @@ export async function POST(request: Request) {
 
   const amount = Number(body.amount);
   const phoneInput = typeof body.phone === "string" ? body.phone.trim() : "";
-  if (!Number.isInteger(amount) || amount < 5000) {
-    return Response.json({ error: "The minimum withdrawal is UGX 5,000." }, { status: 400 });
+  if (!Number.isInteger(amount) || amount <= 0) {
+    return Response.json({ error: "Enter a positive whole-number withdrawal amount." }, { status: 400 });
   }
   try {
     const payments = createPesaJetClient();
