@@ -25,7 +25,7 @@ import { InvestSheet } from "./InvestSheet";
 
 const CAROUSEL_IMAGES = [
   { src: "/images/plan1.jpg", alt: "HIV testing awareness" },
-  { src: "/images/plan3.jpg", alt: "World AIDS Day awareness" },
+  { src: "/images/aidsday.jpg", alt: "World AIDS Day awareness" },
   { src: "/images/plan4.jpg", alt: "Know your status and protect your health" },
 ];
 

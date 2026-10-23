@@ -436,7 +436,6 @@ function AccountPage() {
         <InstallAppButton className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-[13px] font-bold text-white disabled:cursor-default disabled:opacity-70" />
       </Panel>
       <PageButton disabled={busy} onClick={() => void signOut()}><IconLogout width={17} height={17} /> {busy ? "Signing out..." : "Sign out"}</PageButton>
-      <p className="m-0 text-center text-[10px] text-muted">{user?.email}</p>
     </PageFrame>
   );
 }
