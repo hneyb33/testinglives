@@ -391,6 +391,7 @@ type PaymentApiResult = {
   transactionId: string;
   providerTransactionId?: string;
   status?: string;
+  promptSent?: boolean;
   message?: string;
 };
 
@@ -425,7 +426,7 @@ export async function requestWithdrawal(amount: number, phone: string, provider?
 }
 
 export async function fetchPendingWithdrawals(client: SupabaseClient) {
-  const { data, error } = await client.rpc("get_pending_pesajet_withdrawals").returns<PendingWithdrawal[]>();
+  const { data, error } = await client.rpc("get_pending_marzpay_withdrawals").returns<PendingWithdrawal[]>();
   if (error) throw error;
   return Array.isArray(data) ? data : [];
 }

@@ -324,7 +324,7 @@ export function AdminDashboard() {
     await runAction(
       transaction.id,
       () => setWithdrawalMethod(getSupabaseBrowserClient(), transaction.id, method),
-      `Payout method changed to ${method.toUpperCase()}.`,
+      `Payout method changed to ${method === "api" ? "MARZPAY" : "MANUAL"}.`,
     );
   }
 
@@ -332,7 +332,7 @@ export function AdminDashboard() {
     await runAction(
       transaction.id,
       () => approveWithdrawal(transaction.id),
-      "API payout request sent. Check transaction status before retrying.",
+      "MarzPay payout submitted or status checked. Review the transaction record for updates.",
     );
   }
 
@@ -571,7 +571,7 @@ function TransactionCard({
         {transaction.kind === "withdraw" && <InfoRow label="Gross / fee" value={`${currency(transaction.amount)} / ${currency(transaction.fee)}`} />}
         <InfoRow label="Network" value={transaction.payment_provider?.toUpperCase() ?? "Not specified"} />
         <InfoRow label="Reviewed by" value={transaction.approved_by_phone || "—"} />
-        <InfoRow label="Payout method" value={transaction.payout_method.toUpperCase()} />
+        <InfoRow label="Payout method" value={transaction.payout_method === "api" ? "MARZPAY" : "MANUAL"} />
         {transaction.provider_transaction_id && <InfoRow label="Provider transaction" value={transaction.provider_transaction_id} />}
         {transaction.manual_payment_reference && <InfoRow label="Manual payment ref" value={transaction.manual_payment_reference} />}
       </dl>
@@ -591,7 +591,7 @@ function TransactionCard({
           {waiting && (
             <div className="flex flex-wrap gap-2">
               <ActionButton secondary onClick={() => onPayoutMethod("manual")} disabled={busy || transaction.payout_method === "manual"}>Manual payout</ActionButton>
-              <ActionButton secondary onClick={() => onPayoutMethod("api")} disabled={busy || transaction.payout_method === "api"}>API payout</ActionButton>
+              <ActionButton secondary onClick={() => onPayoutMethod("api")} disabled={busy || transaction.payout_method === "api"}>MarzPay payout</ActionButton>
             </div>
           )}
           {(transaction.payout_method === "manual" && waiting) && (
@@ -603,12 +603,12 @@ function TransactionCard({
           )}
           {(transaction.payout_method === "api" && waiting) && (
             <div className="flex flex-wrap gap-2">
-              <ActionButton onClick={onApproveApi} disabled={busy}>Approve & send API payout</ActionButton>
+              <ActionButton onClick={onApproveApi} disabled={busy}>Approve & send with MarzPay</ActionButton>
               <AdminInput label="Rejection reason (required)" value={reason} onChange={(event) => onReason(event.target.value)} />
               <ActionButton secondary onClick={() => onWithdrawalAction("reject")} disabled={busy || reason.trim().length < 3}>Reject & refund</ActionButton>
             </div>
           )}
-          {processing && transaction.payout_method === "api" && <ActionButton onClick={onApproveApi} disabled={busy}>Retry API payout</ActionButton>}
+          {processing && transaction.payout_method === "api" && <ActionButton onClick={onApproveApi} disabled={busy}>Check MarzPay payout</ActionButton>}
           {processing && transaction.payout_method === "manual" && (
             <>
               <AdminInput label="External payment reference (required)" value={reference} onChange={(event) => onReference(event.target.value)} maxLength={200} required />

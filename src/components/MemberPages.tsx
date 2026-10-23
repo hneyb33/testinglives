@@ -568,9 +568,11 @@ function DepositPage() {
     setBusy(true);
     setError(null);
     try {
-      await requestDeposit(value, phone, selectedProvider);
+      const result = await requestDeposit(value, phone, selectedProvider);
       setAmount("");
-      toast(`Payment prompt sent to ${phone}. Approve it on that phone to complete your deposit.`);
+      toast(result.promptSent
+        ? `Payment prompt sent to ${phone}. Approve it on that phone to complete your deposit.`
+        : result.message ?? "Deposit status checked. Review Records for updates.");
       navigate("/records");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Deposit request could not be submitted.");

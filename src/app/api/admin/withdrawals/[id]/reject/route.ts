@@ -15,7 +15,7 @@ export async function POST(
     return Response.json({ error: "Invalid withdrawal ID." }, { status: 400 });
   }
 
-  const { error } = await session.client.rpc("reject_pesajet_withdrawal", {
+  const { error } = await session.client.rpc("reject_marzpay_withdrawal", {
     p_transaction_id: id,
   });
   if (error) return Response.json({ error: error.message }, { status: 409 });
