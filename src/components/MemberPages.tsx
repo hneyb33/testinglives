@@ -134,7 +134,7 @@ const DEFAULT_APP_SETTINGS: AdminSettings = {
   withdrawal_end: "21:00",
   withdrawal_fee_percent: 20,
   referral_reward_percent: 15,
-  referral_rule: "Referral rewards are credited after a referred member reports a completed test and it is verified.",
+  referral_rule: "Commission is credited on each successful deposit and never depends on HIV status or test results.",
   welcome_message: "Official support will never ask for your password or screenshots of your deposits. Keep your account details private.",
 };
 
@@ -192,7 +192,7 @@ function ReferralCodePanel() {
           <IconCopy />
         </button>
       </div>
-      <p className="mb-0 mt-3 text-[12px] leading-relaxed text-muted">Referral reward: {settings.referral_reward_percent}% of the plan price. {settings.referral_rule} The reward never depends on HIV status or results. Testing is voluntary; never request or share someone&apos;s results.</p>
+      <p className="mb-0 mt-3 text-[12px] leading-relaxed text-muted">Referral commission: {settings.referral_reward_percent}% of every successful deposit. {settings.referral_rule} Testing is voluntary; never request or share someone&apos;s results.</p>
       <PageButton onClick={copyLink}><IconCopy width={17} height={17} /> Copy invite link</PageButton>
     </Panel>
   );
@@ -289,7 +289,7 @@ function IncomePage() {
                     <p className="m-0 text-right text-muted">Days remaining <span className="font-semibold text-ink">{remaining}</span></p>
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-2 border-t border-line-blue/50 pt-3">
-                    <span className="text-[11px] text-muted">{availableDays > 0 ? `${availableDays} day(s) ready` : "Next earnings unlock after 24 hours"}</span>
+                    <span className="text-[11px] text-muted">{availableDays > 0 ? `${availableDays} day(s) ready` : "Daily rewards credit at 1:00 pm EAT"}</span>
                     <PageButton disabled={availableDays < 1 || claiming === investment.id} onClick={() => void claim(investment)}>
                       {claiming === investment.id ? "Claiming..." : `Claim ${availableDays > 0 ? `UGX ${formatMoney(availableDays * investment.daily_income)}` : ""}`}
                     </PageButton>
@@ -363,7 +363,7 @@ function TeamPage() {
           </div>
         )}
       </Panel>
-      <p className="m-0 text-[11px] leading-relaxed text-muted">Referral rewards are part of a separate, disclosed program. The reward is not based on HIV status or test results, which remain private.</p>
+      <p className="m-0 text-[11px] leading-relaxed text-muted">Referral commissions are part of a separate, disclosed program and are based on successful deposits. They are not based on HIV status or test results, which remain private.</p>
     </PageFrame>
   );
 }
@@ -372,14 +372,14 @@ function SharePage() {
   return (
     <PageFrame title="Referrals and awareness">
       <div className="relative aspect-[3/5] overflow-hidden rounded-xl bg-primary">
-        <Image src="/images/referral-earnings.jpg" alt="Earn a disclosed 15% referral reward after your invited member completes a test and it is verified" fill priority className="object-contain" sizes="448px" />
+        <Image src="/images/referral-earnings.jpg" alt="Refer a friend to HIV testing and awareness; referral commission terms are disclosed separately" fill priority className="object-contain" sizes="448px" />
       </div>
       <ReferralCodePanel />
       <Panel title="Share awareness">
         <ol className="m-0 space-y-3 pl-5 text-[13px] leading-relaxed text-ink-soft">
           <li>Encourage friends and relatives to learn about HIV testing and qualified healthcare providers.</li>
           <li>Share your personal invitation link if they choose to join the separate referral program.</li>
-          <li>Any 15% reward terms are disclosed separately and do not depend on HIV status or test results.</li>
+          <li>Referral commission terms are disclosed separately and do not depend on HIV status or test results.</li>
         </ol>
         <p className="mb-0 mt-4 text-[12px] leading-relaxed text-muted">Testing must remain voluntary. Never ask someone to disclose their results to you.</p>
       </Panel>

@@ -102,7 +102,7 @@ export async function requestMarzPay(
 
 export function verifyMarzPayWebhookSignature(rawBody: string, headers: Headers): boolean {
   const secret = process.env.MARZPAY_WEBHOOK_SECRET;
-  if (!secret) return true;
+  if (!secret) return false;
 
   const signature = headers.get("x-marzpay-signature");
   const timestamp = headers.get("x-marzpay-timestamp");

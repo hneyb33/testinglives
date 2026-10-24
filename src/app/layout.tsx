@@ -18,13 +18,11 @@ export const metadata: Metadata = {
     type: "website",
     title: "Testing Lives",
     description: "Respectful HIV awareness and testing information for every community.",
-    images: [{ url: "/images/logo.jpg", alt: "Testing Lives" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Testing Lives",
     description: "Respectful HIV awareness and testing information for every community.",
-    images: [{ url: "/images/logo.jpg", alt: "Testing Lives" }],
   },
   appleWebApp: {
     capable: true,

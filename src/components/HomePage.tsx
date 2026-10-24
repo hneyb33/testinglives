@@ -508,7 +508,7 @@ function DailyEarnings({
                   <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
                 </div>
                 <p className="mb-0 mt-2 text-[11px] text-muted">
-                  Claimed {investment.claimed_days} days · {availableDays > 0 ? `${availableDays} day(s) ready` : "Next earnings unlock after 24 hours"}
+                  Claimed {investment.claimed_days} days · {availableDays > 0 ? `${availableDays} day(s) ready` : "Daily rewards credit at 1:00 pm EAT"}
                 </p>
                 <button
                   type="button"

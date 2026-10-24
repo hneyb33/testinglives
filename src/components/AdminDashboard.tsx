@@ -12,11 +12,13 @@ import type {
 import {
   adjustMemberBalance,
   approveWithdrawal,
+  checkMarzPayDeposit,
   fetchAdminDashboard,
   formatDate,
   formatMoney,
   manageWithdrawal,
   promoteAdmin,
+  reconcileMarzPayDeposits,
   reviewAdminDeposit,
   saveAdminSettings,
   setWithdrawalMethod,
@@ -29,6 +31,8 @@ import { useApp } from "./AppContext";
 
 type DashboardTab = "overview" | "deposits" | "withdrawals" | "members" | "referrals" | "active-tests" | "test-plans" | "admins" | "settings";
 type StatusFilter = "all" | "pending" | "approved" | "rejected";
+
+const RECONCILE_BUSY_ID = "__reconcile_deposits__";
 
 const TABS: { id: DashboardTab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -336,6 +340,30 @@ export function AdminDashboard() {
     );
   }
 
+  async function checkDeposit(transaction: AdminTransaction) {
+    await runAction(
+      transaction.id,
+      () => checkMarzPayDeposit(transaction.id),
+      "MarzPay deposit status checked. Review the record for updates.",
+    );
+  }
+
+  async function reconcileDeposits() {
+    setBusyId(RECONCILE_BUSY_ID);
+    setError(null);
+    try {
+      const result = await reconcileMarzPayDeposits();
+      await loadDashboard();
+      toast(result.message);
+    } catch (reconcileError) {
+      const message = messageOf(reconcileError, "The reconciliation pass could not be completed.");
+      setError(message);
+      toast(message, "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (!isAdmin) {
     return <main className="min-h-screen bg-page p-4"><AdminPanel><p role="alert" className="m-0 text-[13px] text-danger">Administrator access is required.</p></AdminPanel></main>;
   }
@@ -375,7 +403,19 @@ export function AdminDashboard() {
           <>
             {tab === "overview" && <OverviewPanel data={dashboard} goTo={setTab} />}
             {(tab === "deposits" || tab === "withdrawals") && (
-              <AdminPanel title={`${tab === "deposits" ? "Deposits" : "Withdrawals"} · ${transactions.length}`}>
+              <AdminPanel
+                title={`${tab === "deposits" ? "Deposits" : "Withdrawals"} · ${transactions.length}`}
+                action={tab === "deposits" ? (
+                  <ActionButton secondary onClick={() => void reconcileDeposits()} disabled={busyId === RECONCILE_BUSY_ID}>
+                    {busyId === RECONCILE_BUSY_ID ? "Reconciling…" : "Reconcile stuck deposits"}
+                  </ActionButton>
+                ) : undefined}
+              >
+                <p className="mb-3 mt-0 text-[11px] leading-relaxed text-muted">
+                  {tab === "deposits"
+                    ? "MarzPay deposits settle only on provider confirmation. Use Check MarzPay status on a single record or reconcile all pending MarzPay deposits at once."
+                    : "Withdrawals are paid manually or through MarzPay; reserved funds are returned automatically when a payout fails."}
+                </p>
                 <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
                   {STATUS_FILTERS.map((filter) => <button key={filter.id} type="button" aria-pressed={statusFilter === filter.id} onClick={() => setStatusFilter(filter.id)} className={`shrink-0 rounded-lg px-3 py-2 text-[11px] font-semibold ${statusFilter === filter.id ? "bg-primary text-white" : "bg-page text-ink-soft"}`}>{filter.label}</button>)}
                 </div>
@@ -397,6 +437,7 @@ export function AdminDashboard() {
                       onWithdrawalAction={(action) => void actionWithdrawal(transaction, action)}
                       onPayoutMethod={(method) => void changePayoutMethod(transaction, method)}
                       onApproveApi={() => void approveApiWithdrawal(transaction)}
+                      onCheckDeposit={() => void checkDeposit(transaction)}
                     />
                   ))}</div>
                 )}
@@ -478,7 +519,7 @@ export function AdminDashboard() {
                     <AdminInput label="Withdrawal start (Kampala)" type="time" value={settings.withdrawal_start} onChange={(event) => setSettings({ ...settings, withdrawal_start: event.target.value })} required />
                     <AdminInput label="Withdrawal end (Kampala)" type="time" value={settings.withdrawal_end} onChange={(event) => setSettings({ ...settings, withdrawal_end: event.target.value })} required />
                     <AdminInput label="Withdrawal fee (%)" type="number" min="0" max="100" step="0.01" value={settings.withdrawal_fee_percent} onChange={(event) => setSettings({ ...settings, withdrawal_fee_percent: Number(event.target.value) })} required />
-                    <AdminInput label="Referral reward (%)" type="number" min="0" max="100" step="0.01" value={settings.referral_reward_percent} onChange={(event) => setSettings({ ...settings, referral_reward_percent: Number(event.target.value) })} required />
+                    <AdminInput label="Referral commission (%)" type="number" min="0" max="100" step="0.01" value={settings.referral_reward_percent} onChange={(event) => setSettings({ ...settings, referral_reward_percent: Number(event.target.value) })} required />
                   </div>
                   <AdminTextarea label="Referral rules" maxLength={1000} value={settings.referral_rule} onChange={(event) => setSettings({ ...settings, referral_rule: event.target.value })} />
                   <AdminTextarea label="Welcome message" maxLength={2000} value={settings.welcome_message} onChange={(event) => setSettings({ ...settings, welcome_message: event.target.value })} />
@@ -541,6 +582,7 @@ function TransactionCard({
   onWithdrawalAction,
   onPayoutMethod,
   onApproveApi,
+  onCheckDeposit,
 }: {
   transaction: AdminTransaction;
   busy: boolean;
@@ -552,6 +594,7 @@ function TransactionCard({
   onWithdrawalAction: (action: "reject" | "approve_manual" | "manual_paid" | "manual_failed") => void;
   onPayoutMethod: (method: "manual" | "api") => void;
   onApproveApi: () => void;
+  onCheckDeposit: () => void;
 }) {
   const providerDeposit = transaction.kind === "deposit" && Boolean(transaction.provider_transaction_id || transaction.payment_provider);
   const waiting = transaction.status === "pending";
@@ -585,7 +628,12 @@ function TransactionCard({
           </div>
         </div>
       )}
-      {providerDeposit && (waiting || processing) && <p className="mb-0 mt-3 rounded-lg bg-page p-2 text-[10px] leading-relaxed text-muted">This deposit is settled only by verified payment-provider confirmation; manual credit/rejection is disabled.</p>}
+      {providerDeposit && (waiting || processing) && (
+        <div className="mt-3 space-y-2 border-t border-line-blue/50 pt-3">
+          <ActionButton secondary onClick={onCheckDeposit} disabled={busy}>Check MarzPay status</ActionButton>
+          <p className="m-0 rounded-lg bg-page p-2 text-[10px] leading-relaxed text-muted">This deposit is settled only by verified payment-provider confirmation; manual credit/rejection is disabled.</p>
+        </div>
+      )}
       {transaction.kind === "withdraw" && (waiting || processing) && (
         <div className="mt-3 space-y-3 border-t border-line-blue/50 pt-3">
           {waiting && (

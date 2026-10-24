@@ -440,6 +440,29 @@ export async function fetchAdminTransactions(client: SupabaseClient, offset = 0,
   return Array.isArray(data) ? data : [];
 }
 
+type MarzPayDepositCheckResult = {
+  transactionId: string;
+  status: string;
+  message: string;
+};
+
+export type MarzPayReconcileResult = {
+  total: number;
+  checked: number;
+  updated: number;
+  failed: number;
+  errors: string[];
+  message: string;
+};
+
+export async function checkMarzPayDeposit(transactionId: string) {
+  return postAuthenticatedPayment<MarzPayDepositCheckResult>(`/api/admin/deposits/${transactionId}/check`, {});
+}
+
+export async function reconcileMarzPayDeposits() {
+  return postAuthenticatedPayment<MarzPayReconcileResult>("/api/admin/deposits/reconcile", {});
+}
+
 export async function approveWithdrawal(transactionId: string) {
   return postAuthenticatedPayment<PaymentApiResult>(`/api/admin/withdrawals/${transactionId}/approve`, {});
 }
