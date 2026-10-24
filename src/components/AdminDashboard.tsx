@@ -377,7 +377,7 @@ export function AdminDashboard() {
         </div>
         <div className="flex gap-2">
           <ActionButton secondary onClick={() => void loadDashboard(true)}>Refresh</ActionButton>
-          <ActionButton secondary onClick={() => navigate("/account")}>My account</ActionButton>
+          <ActionButton secondary onClick={() => navigate("/account")}>Mine</ActionButton>
         </div>
       </header>
 
