@@ -98,8 +98,8 @@ as $$
 declare
   current_balance numeric(14, 2);
   existing_row public.transactions%rowtype;
-  withdrawal_fee numeric(14, 2);
-  payout_amount numeric(14, 2);
+  withdrawal_fee numeric(14, 0);
+  payout_amount numeric(14, 0);
   minimum_amount numeric(14, 2);
   fee_percent numeric(5, 2);
   configured_start time;
@@ -148,7 +148,7 @@ begin
   end if;
   if current_balance < p_amount then raise exception 'Insufficient balance.'; end if;
 
-  withdrawal_fee := round(p_amount * coalesce(fee_percent, 20) / 100, 2);
+  withdrawal_fee := round(p_amount * coalesce(fee_percent, 20) / 100, 0);
   payout_amount := p_amount - withdrawal_fee;
   update public.profiles set balance = balance - p_amount where id = auth.uid();
   insert into public.transactions (
@@ -427,6 +427,7 @@ declare
   event_phone text;
   event_currency text;
   event_amount numeric;
+  expected_amount numeric;
 begin
   if coalesce(auth.jwt() ->> 'role', '') <> 'service_role' then
     raise exception 'MarzPay webhook processing requires the service role.';
@@ -510,8 +511,15 @@ begin
   for update;
   if not found then raise exception 'MarzPay payment reference not found.'; end if;
 
+  if payment_kind = 'withdraw' then
+    expected_amount := payment_row.net_amount;
+  else
+    expected_amount := payment_row.amount;
+  end if;
+
   if event_amount is null
-    or event_amount <> case when payment_kind = 'withdraw' then payment_row.net_amount else payment_row.amount end
+    or event_amount <> trunc(event_amount)
+    or event_amount <> expected_amount
     or event_currency <> 'UGX'
     or event_phone is distinct from payment_row.payment_phone
     or event_provider is distinct from payment_row.payment_provider then

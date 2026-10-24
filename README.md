@@ -6,7 +6,7 @@ Community HIV awareness and referral portal built with Next.js, Tailwind CSS, an
 
 1. Create a Supabase project and enable email authentication.
 2. Copy `.env.example` to `.env.local`.
-3. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_SITE_URL` in `.env.local`. Use your deployed public URL for `NEXT_PUBLIC_SITE_URL` so shared referral links have a reachable Open Graph preview.
+3. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_SITE_URL` in `.env.local`. Use your deployed public URL for `NEXT_PUBLIC_SITE_URL` so shared referral links have a reachable Open Graph preview using `public/images/logo.jpg`.
 4. Add your local app URL (for example, `http://localhost:3000`) to the Supabase Auth URL configuration. Configure the allowed redirect URLs for account confirmation and password recovery.
 5. Install dependencies and start the development server:
 
@@ -17,7 +17,7 @@ Community HIV awareness and referral portal built with Next.js, Tailwind CSS, an
 
 ## Supabase database
 
-Apply all files in `supabase/migrations/` to the Supabase project before registering members or processing payments. Run them in filename order in the Supabase SQL Editor, or apply them with the Supabase CLI after linking the project (`supabase db push`). The migrations create the plan catalog and tables, referral-aware profile trigger, row-level policies, payment/referral RPCs, and admin-managed community links.
+Apply all files in `supabase/migrations/` to the Supabase project before registering members or processing payments. Run them in filename order in the Supabase SQL Editor, or apply them with the Supabase CLI after linking the project (`supabase db push`). The migrations create the plan catalog and tables, referral-aware profile trigger, row-level policies, payment/referral RPCs, and admin-managed community links. A member receives a separate UGX 1,000 bonus only on their first successfully approved deposit. Existing successful deposits count toward eligibility, and the bonus is not backdated.
 
 The first profile can register without an invitation code. Later registrations require a valid code; the profile trigger assigns each member a unique code. A referred member can report test completion without submitting medical results. An administrator verifies that report, and only then is the configured reward on the plan price credited to the referrer. Plans follow the supplied price, daily earnings, and duration table, with no more than three purchases of each plan per member. Daily earnings unlock every 24 hours and can be claimed together when multiple days have accrued.
 
